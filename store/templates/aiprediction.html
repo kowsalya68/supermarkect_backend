@@ -1,0 +1,484 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Business Prediction | Supermarket AI</title>
+    <link rel="stylesheet" href="{% static 'css/aiprediction.css' %}">
+</head>
+<body>
+
+{% include 'sidebar.html' %}
+
+<div class="app-layout">
+<main class="main-content">
+
+    <header class="top-header">
+        <div>
+            <h1>AI Business Prediction</h1>
+            <p class="page-subtitle">
+                Predict next month's sales, profit or loss, and product demand.
+            </p>
+        </div>
+        <div class="header-right">
+            <span class="live-indicator"></span>
+            <span class="live-text">Database Connected</span>
+            <div class="header-avatar">A</div>
+        </div>
+    </header>
+
+    <!-- FORECAST INTRO -->
+    <section class="forecast-banner">
+        <div class="banner-content">
+            <div class="banner-icon">✦</div>
+            <div>
+                <h2>Next Month Business Forecast</h2>
+                <p>Forecast period:
+                    <strong>{{ forecast.forecast_month|default:"Next month" }}</strong>
+                </p>
+                <p class="banner-description">
+                    Estimated using recorded sales, product costs, and current stock.
+                </p>
+            </div>
+        </div>
+        <button type="button" class="refresh-button"
+                onclick="window.location.reload()">
+            ↻ Refresh Data
+        </button>
+    </section>
+
+    <!-- SUMMARY CARDS -->
+    <section class="forecast-cards">
+
+        <article class="metric-card sales-card">
+            <div class="metric-top">
+                <span class="metric-label">Predicted Sales</span>
+                <span class="metric-icon">₹</span>
+            </div>
+            <h2>₹{{ forecast.predicted_sales|default:0|floatformat:2 }}</h2>
+            <p class="metric-description">Expected revenue next month</p>
+            <span class="metric-footer">Sales Forecast</span>
+        </article>
+
+        <article class="metric-card cost-card">
+            <div class="metric-top">
+                <span class="metric-label">Predicted Cost</span>
+                <span class="metric-icon">↗</span>
+            </div>
+            <h2>₹{{ forecast.predicted_cost|default:0|floatformat:2 }}</h2>
+            <p class="metric-description">Estimated product cost</p>
+            <span class="metric-footer">Cost Forecast</span>
+        </article>
+
+        <article class="metric-card confidence-card">
+    <div class="metric-top">
+        <span class="metric-label">Data Coverage</span>
+        <span class="metric-icon">✓</span>
+    </div>
+
+    <h2>{{ forecast.confidence|floatformat:1 }}%</h2>
+
+    <p class="metric-description">
+        Historical data coverage indicator
+    </p>
+
+    <span class="metric-footer">
+        {{ forecast.observed_days }} observed days
+    </span>
+</article>
+
+        <article class="metric-card
+            {% if forecast.predicted_profit < 0 %}loss-card{% else %}profit-card{% endif %}">
+            <div class="metric-top">
+                <span class="metric-label">Predicted Profit / Loss</span>
+                <span class="metric-icon">₹</span>
+            </div>
+            <h2>
+                {% if forecast.predicted_profit < 0 %}-{% endif %}
+                ₹{{ forecast.predicted_profit|default:0|floatformat:2 }}
+            </h2>
+            <p class="metric-description">Expected financial result</p>
+            <span class="metric-footer">
+                {% if forecast.predicted_profit < 0 %}
+                    Estimated Loss
+                {% elif forecast.predicted_profit > 0 %}
+                    Estimated Profit
+                {% else %}
+                    Break-even Estimate
+                {% endif %}
+            </span>
+        </article>
+
+        <article class="metric-card risk-card">
+            <div class="metric-top">
+                <span class="metric-label">Business Risk</span>
+                <span class="metric-icon">⚑</span>
+            </div>
+            <h2 class="risk-value {{ forecast.risk_level|default:'Low'|lower }}">
+                {{ forecast.risk_level|default:"Low"|upper }}
+            </h2>
+            <p class="metric-description">Estimated forecast risk</p>
+            <span class="metric-footer">Based on forecast margin</span>
+        </article>
+
+    </section>
+
+    <!-- UPDATED PROFIT AND LOSS PREDICTION -->
+    <section class="panel prediction-panel">
+        <div class="panel-heading">
+            <div>
+                <h2>Next-Month Profit &amp; Loss Prediction</h2>
+                <p>Understand your expected business performance for next month.</p>
+            </div>
+            <span class="heading-icon">₹</span>
+        </div>
+
+        <div class="prediction-result
+            {% if forecast.predicted_profit < 0 %}result-loss
+            {% elif forecast.predicted_profit > 0 %}result-profit
+            {% else %}result-neutral{% endif %}">
+
+            <div class="result-symbol">
+                {% if forecast.predicted_profit < 0 %}
+                    ↓
+                {% elif forecast.predicted_profit > 0 %}
+                    ↑
+                {% else %}
+                    =
+                {% endif %}
+            </div>
+
+            <div class="result-text">
+                <span>Expected result for {{ forecast.forecast_month|default:"next month" }}</span>
+                <h3>
+                    {% if forecast.predicted_profit < 0 %}
+                        Business may make a loss
+                    {% elif forecast.predicted_profit > 0 %}
+                        Business may make a profit
+                    {% else %}
+                        Business may break even
+                    {% endif %}
+                </h3>
+                <p>
+                    This is an estimate based on available sales and cost data,
+                    not a guaranteed outcome.
+                </p>
+            </div>
+
+            <div class="result-amount">
+                <span>Estimated result</span>
+                <strong>
+                    {% if forecast.predicted_profit < 0 %}-{% endif %}₹{{ forecast.predicted_profit|default:0|floatformat:2 }}
+                </strong>
+            </div>
+        </div>
+
+        <div class="profit-summary">
+            <div class="profit-summary-item">
+                <span>Expected Revenue</span>
+                <strong class="revenue-value">
+                    ₹{{ forecast.predicted_sales|default:0|floatformat:2 }}
+                </strong>
+            </div>
+
+            <div class="profit-summary-item">
+                <span>Expected Product Cost</span>
+                <strong class="cost-value">
+                    ₹{{ forecast.predicted_cost|default:0|floatformat:2 }}
+                </strong>
+            </div>
+
+            <div class="profit-summary-item
+                {% if forecast.predicted_profit < 0 %}highlight-loss
+                {% else %}highlight-profit{% endif %}">
+                <span>Expected Profit / Loss</span>
+                <strong>
+                    {% if forecast.predicted_profit < 0 %}-{% endif %}₹{{ forecast.predicted_profit|default:0|floatformat:2 }}
+                </strong>
+            </div>
+        </div>
+
+        <div class="margin-section">
+            <div class="margin-heading">
+                <span>Estimated Profit Margin</span>
+                <strong class="{% if forecast.profit_margin < 0 %}negative-margin{% else %}positive-margin{% endif %}">
+                    {{ forecast.profit_margin|default:0|floatformat:1 }}%
+                </strong>
+            </div>
+
+            <div class="progress-track">
+                <div class="progress-fill
+                    {% if forecast.profit_margin < 0 %}margin-loss{% else %}margin-profit{% endif %}"
+                    style="width: {% if forecast.profit_margin > 100 %}100{% elif forecast.profit_margin > 0 %}{{ forecast.profit_margin }}{% else %}0{% endif %}%;">
+                </div>
+            </div>
+
+            <p class="small-note">
+                Profit margin = (predicted profit ÷ predicted revenue) × 100.
+                If revenue is zero, the margin should be zero.
+            </p>
+        </div>
+
+        <div class="prediction-advice">
+            <h3>Recommended action</h3>
+            {% if forecast.predicted_profit < 0 %}
+                <p class="advice-loss">
+                    Review product purchase costs, reduce unnecessary stock orders,
+                    check slow-moving products, and reassess selling prices before
+                    investing more money.
+                </p>
+            {% elif forecast.predicted_profit > 0 %}
+                <p class="advice-profit">
+                    Your forecast indicates a profit. Monitor costs and prioritize
+                    products with consistent demand before increasing stock.
+                </p>
+            {% else %}
+                <p>
+                    Your forecast is at break-even. Review your costs and sales
+                    prices to improve the expected result.
+                </p>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- INVESTMENT ALLOCATION -->
+    <section class="panel investment-panel">
+        <div class="panel-heading">
+            <div>
+                <h2>Investment Allocation</h2>
+                <p>Adjust your planning budget across product categories.</p>
+            </div>
+            <span class="heading-icon">◉</span>
+        </div>
+
+        <label for="investmentAmount" class="field-label">
+            Total investment amount (₹)
+        </label>
+
+        <div class="investment-input-wrap">
+            <span>₹</span>
+            <input type="number" id="investmentAmount" min="0"
+                   step="100" value="100000"
+                   placeholder="Enter investment amount">
+        </div>
+
+        <div class="allocation-list">
+            {% for item in allocation_items %}
+            <div class="allocation-item">
+                <div class="allocation-info">
+                    <span class="allocation-dot {{ item.css_class }}"></span>
+                    <span>{{ item.name }}</span>
+                    <strong>{{ item.percent }}%</strong>
+                </div>
+                <div class="allocation-track">
+                    <div class="allocation-fill {{ item.css_class }}"
+                         style="width:{{ item.percent }}%"></div>
+                </div>
+                <span class="allocation-value"
+                      data-percent="{{ item.percent }}">₹0.00</span>
+            </div>
+            {% empty %}
+            <p class="empty-state">
+                Investment allocation settings are not available.
+            </p>
+            {% endfor %}
+        </div>
+
+        <div class="allocation-total">
+            <span>Total allocated</span>
+            <strong id="allocationTotal">₹0.00</strong>
+        </div>
+        <p class="small-note">
+            These percentages are planning defaults, not AI-generated investment advice.
+        </p>
+    </section>
+
+    <!-- HIGH DEMAND -->
+    <section class="panel table-panel">
+        <div class="panel-heading table-heading">
+            <div>
+                <h2>High-Demand Products</h2>
+                <p>Products with forecast demand above current stock.</p>
+            </div>
+            <span class="status-pill status-warning">Restock Review</span>
+        </div>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Current Stock</th>
+                        <th>Predicted Demand</th>
+                        <th>Suggested Restock</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in high_demand_products %}
+                    <tr>
+                        <td class="product-name">{{ product.name }}</td>
+                        <td>{{ product.category }}</td>
+                        <td>{{ product.current_stock }}</td>
+                        <td>{{ product.predicted_demand|floatformat:0 }}</td>
+                        <td class="restock-number">+{{ product.stock_gap|floatformat:0 }}</td>
+                        <td><span class="action-restock">RESTOCK</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            No restocking gaps were identified by this estimate.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- OVERSTOCK RISK -->
+    <section class="panel risk-products-panel">
+        <div class="panel-heading">
+            <div>
+                <h2>Products at Risk of Overstocking</h2>
+                <p>Current stock may exceed estimated next-month demand.</p>
+            </div>
+            <span class="status-pill status-danger">Review Stock</span>
+        </div>
+
+        <div class="risk-product-grid">
+            {% for product in loss_risk_products %}
+            <article class="risk-product-card">
+                <div class="risk-product-top">
+                    <div class="risk-product-icon">📦</div>
+                    <span class="risk-badge {{ product.risk|default:'Medium'|lower }}">
+                        {{ product.risk|default:"Medium" }}
+                    </span>
+                </div>
+                <h3>{{ product.name }}</h3>
+                <p class="risk-category">{{ product.category }}</p>
+                <div class="risk-product-stats">
+                    <div>
+                        <span>Current Stock</span>
+                        <strong>{{ product.current_stock }}</strong>
+                    </div>
+                    <div>
+                        <span>Estimated Demand</span>
+                        <strong>{{ product.predicted_demand|floatformat:0 }}</strong>
+                    </div>
+                </div>
+                <p class="risk-recommendation">
+                    {{ product.recommendation|default:"Review stock levels before placing another order." }}
+                </p>
+            </article>
+            {% empty %}
+            <div class="empty-state risk-empty">
+                No products are currently flagged for overstocking.
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- RECOMMENDATIONS -->
+    <section class="panel recommendations-panel">
+        <div class="panel-heading">
+            <div>
+                <h2>Business Recommendations</h2>
+                <p>Actions to consider based on your forecast.</p>
+            </div>
+            <span class="recommendation-icon">✦</span>
+        </div>
+
+        <div class="recommendation-list">
+            {% if high_demand_products %}
+            <div class="recommendation-item">
+                <span class="recommendation-check">✓</span>
+                <div>
+                    <strong>Review restocking needs</strong>
+                    <p>Check forecast demand and supplier availability before ordering.</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if loss_risk_products %}
+            <div class="recommendation-item">
+                <span class="recommendation-check">!</span>
+                <div>
+                    <strong>Reduce overstock risk</strong>
+                    <p>Review expiry dates, promotions, and slow-moving stock.</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="recommendation-item">
+                <span class="recommendation-check">₹</span>
+                <div>
+                    <strong>
+                        {% if forecast.predicted_profit < 0 %}
+                            Control costs
+                        {% else %}
+                            Protect profit margins
+                        {% endif %}
+                    </strong>
+                    <p>
+                        Compare purchase costs with selling prices and update
+                        your records regularly.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <p class="disclaimer">
+            Forecasts are estimates, not guaranteed results. Accuracy depends on
+            the completeness and quality of recorded sales and cost data.
+        </p>
+    </section>
+
+    <footer class="page-footer">
+        <p>© Supermarket AI · Business Prediction Dashboard</p>
+    </footer>
+
+</main>
+</div>
+
+<script>
+    const investmentInput = document.getElementById("investmentAmount");
+    const allocationValues = document.querySelectorAll(".allocation-value");
+    const allocationTotal = document.getElementById("allocationTotal");
+
+    function formatRupees(value) {
+        return "₹" + value.toLocaleString("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function updateInvestmentAllocation() {
+        let amount = Number(investmentInput.value);
+
+        if (!Number.isFinite(amount) || amount < 0) {
+            amount = 0;
+        }
+
+        let total = 0;
+
+        allocationValues.forEach(function (element) {
+            const percentage = Number(element.dataset.percent);
+            const allocated = amount * percentage / 100;
+
+            element.textContent = formatRupees(allocated);
+            total += allocated;
+        });
+
+        allocationTotal.textContent = formatRupees(total);
+    }
+
+    investmentInput.addEventListener("input", updateInvestmentAllocation);
+    updateInvestmentAllocation();
+</script>
+
+</body>
+</html>

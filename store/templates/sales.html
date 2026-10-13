@@ -1,0 +1,523 @@
+
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sales Management | Supermarket AI</title>
+
+    <link rel="stylesheet" href="{% static 'css/sales.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- PAGE HEADER -->
+        <header class="page-header">
+            <div>
+                <h1>Sales Management</h1>
+                <p>Track, monitor, and analyze your supermarket sales.</p>
+            </div>
+
+            <div class="header-actions">
+                <span class="current-date">
+                    <i>📅</i> {% now "d M Y" %}
+                </span>
+            </div>
+        </header>
+
+        <!-- SUMMARY CARDS -->
+        <section class="sales-cards">
+
+            <div class="sales-card">
+                <div class="card-top">
+                    <div>
+                        <p class="card-label">Total Sales</p>
+                        <h2>₹{{ total_sales|floatformat:2 }}</h2>
+                    </div>
+                    <div class="card-icon blue">₹</div>
+                </div>
+                <p class="card-description">Total recorded sales</p>
+            </div>
+
+            <div class="sales-card">
+                <div class="card-top">
+                    <div>
+                        <p class="card-label">Today's Sales</p>
+                        <h2>₹{{ today_sales|floatformat:2 }}</h2>
+                    </div>
+                    <div class="card-icon green">📈</div>
+                </div>
+                <p class="card-description">Sales recorded today</p>
+            </div>
+
+            <div class="sales-card">
+                <div class="card-top">
+                    <div>
+                        <p class="card-label">This Month</p>
+                        <h2>₹{{ monthly_sales|floatformat:2 }}</h2>
+                    </div>
+                    <div class="card-icon purple">📊</div>
+                </div>
+                <p class="card-description">
+                    {% if sales_growth > 0 %}
+                        <span class="growth-positive">↑ {{ sales_growth }}%</span>
+                    {% elif sales_growth < 0 %}
+                        <span class="growth-negative">↓ {{ sales_growth }}%</span>
+                    {% else %}
+                        <span>0% growth</span>
+                    {% endif %}
+                    compared with last month
+                </p>
+            </div>
+
+            <div class="sales-card">
+                <div class="card-top">
+                    <div>
+                        <p class="card-label">Transactions</p>
+                        <h2>{{ transaction_count }}</h2>
+                    </div>
+                    <div class="card-icon orange">🧾</div>
+                </div>
+                <p class="card-description">
+                    Average sale: ₹{{ average_sale|floatformat:2 }}
+                </p>
+            </div>
+
+        </section>
+
+        <!-- SALES FILTERS -->
+        <section class="filter-section">
+
+            <div class="section-heading">
+                <div>
+                    <h2>Sales Records</h2>
+                    <p>Search and filter your sales transactions.</p>
+                </div>
+            </div>
+
+            <form method="get"
+                  action="{% url 'sales' %}"
+                  class="sales-filters">
+
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input
+                        type="search"
+                        name="search"
+                        id="searchInput"
+                        placeholder="Search product, customer, SKU or sale ID..."
+                        value="{{ search }}"
+                    >
+                </div>
+
+                <select name="date" aria-label="Filter sales by date">
+                    <option value="all"
+                        {% if date_filter == 'all' %}selected{% endif %}>
+                        All Dates
+                    </option>
+                    <option value="today"
+                        {% if date_filter == 'today' %}selected{% endif %}>
+                        Today
+                    </option>
+                    <option value="week"
+                        {% if date_filter == 'week' %}selected{% endif %}>
+                        This Week
+                    </option>
+                    <option value="month"
+                        {% if date_filter == 'month' %}selected{% endif %}>
+                        This Month
+                    </option>
+                    <option value="last_month"
+                        {% if date_filter == 'last_month' %}selected{% endif %}>
+                        Last Month
+                    </option>
+                </select>
+
+                <select name="payment" aria-label="Filter by payment method">
+                    <option value="all"
+                        {% if payment_filter == 'all' %}selected{% endif %}>
+                        All Payments
+                    </option>
+                    <option value="Cash"
+                        {% if payment_filter == 'Cash' %}selected{% endif %}>
+                        Cash
+                    </option>
+                    <option value="UPI"
+                        {% if payment_filter == 'UPI' %}selected{% endif %}>
+                        UPI
+                    </option>
+                    <option value="Card"
+                        {% if payment_filter == 'Card' %}selected{% endif %}>
+                        Card
+                    </option>
+                </select>
+
+                <button type="submit" class="filter-btn">
+                    Apply Filters
+                </button>
+
+                <a href="{% url 'sales' %}" class="reset-btn">
+                    Reset
+                </a>
+
+            </form>
+        </section>
+
+        <!-- CHART AND SALES SUMMARY -->
+        <section class="analytics-section">
+
+            <div class="chart-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Monthly Sales Overview</h2>
+                        <p>Sales performance during the current year</p>
+                    </div>
+                    <span class="chart-badge">This Year</span>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="monthlySalesChart"></canvas>
+                </div>
+
+            </div>
+
+            <div class="summary-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Sales Summary</h2>
+                        <p>Your sales at a glance</p>
+                    </div>
+                </div>
+
+                <div class="summary-item">
+                    <span>Total Transactions</span>
+                    <strong>{{ transaction_count }}</strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Average Transaction</span>
+                    <strong>₹{{ average_sale|floatformat:2 }}</strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Previous Month</span>
+                    <strong>₹{{ previous_month_sales|floatformat:2 }}</strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>This Month</span>
+                    <strong>₹{{ monthly_sales|floatformat:2 }}</strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Monthly Growth</span>
+                    <strong class="{% if sales_growth >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                        {{ sales_growth }}%
+                    </strong>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- RECENT SALES TABLE -->
+        <section class="table-section">
+
+            <div class="section-heading">
+                <div>
+                    <h2>Recent Sales</h2>
+                    <p>Sales transactions from your database</p>
+                </div>
+
+                <span class="record-count">
+                    {{ page_obj.paginator.count }}
+                    record{{ page_obj.paginator.count|pluralize }}
+                </span>
+            </div>
+
+            <div class="table-responsive">
+                <table id="salesTable">
+
+                    <thead>
+                        <tr>
+                            <th>Sale ID</th>
+                            <th>Date</th>
+                            <th>Product</th>
+                            <th>Category</th>
+                            <th>Quantity</th>
+                            <th>Total Amount</th>
+                            <th>Payment Method</th>
+                            <th>Customer</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for sale in sales %}
+                        <tr>
+                            <td>
+                                <strong>SAL{{ sale.id|stringformat:"03d" }}</strong>
+                            </td>
+
+                            <td>{{ sale.sale_date|date:"d M Y" }}</td>
+
+                            <td>
+                                <div class="product-cell">
+                                    <span class="product-symbol">🛒</span>
+                                    <span>{{ sale.product.name }}</span>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="category-label">
+                                    {{ sale.product.category }}
+                                </span>
+                            </td>
+
+                            <td>{{ sale.quantity }}</td>
+
+                            <td>
+                                <strong>₹{{ sale.total_amount|floatformat:2 }}</strong>
+                            </td>
+
+                            <td>
+                                <span class="payment-label">
+                                    {{ sale.payment_method }}
+                                </span>
+                            </td>
+
+                            <td>
+                                {% if sale.customer_name %}
+                                    {{ sale.customer_name }}
+                                {% else %}
+                                    <span class="muted-text">
+                                        Walk-in Customer
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="empty-state">
+                                <div class="empty-icon">📭</div>
+                                <h3>No sales records found</h3>
+                                <p>
+                                    No transactions match your search
+                                    or selected filters.
+                                </p>
+                                <a href="{% url 'sales' %}" class="reset-btn">
+                                    Clear Filters
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+
+            <!-- PAGINATION -->
+            <div class="table-footer">
+
+                <p class="pagination-info">
+                    Showing
+                    <strong>
+                        {% if page_obj.paginator.count %}
+                            {{ page_obj.start_index }}–{{ page_obj.end_index }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </strong>
+                    of
+                    <strong>{{ page_obj.paginator.count }}</strong>
+                    sales records
+                </p>
+
+                <div class="pagination-controls">
+
+                    {% if page_obj.has_previous %}
+                        <a class="pagination-btn"
+                           href="?page={{ page_obj.previous_page_number }}&search={{ search|urlencode }}&date={{ date_filter|urlencode }}&payment={{ payment_filter|urlencode }}">
+                            &laquo; Previous
+                        </a>
+                    {% else %}
+                        <span class="pagination-btn disabled">
+                            &laquo; Previous
+                        </span>
+                    {% endif %}
+
+                    {% for number in page_obj.paginator.page_range %}
+
+                        {% if number == page_obj.number %}
+                            <span class="pagination-number active">
+                                {{ number }}
+                            </span>
+
+                        {% elif number > page_obj.number|add:"-3" and number < page_obj.number|add:"3" %}
+                            <a class="pagination-number"
+                               href="?page={{ number }}&search={{ search|urlencode }}&date={{ date_filter|urlencode }}&payment={{ payment_filter|urlencode }}">
+                                {{ number }}
+                            </a>
+                        {% endif %}
+
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <a class="pagination-btn"
+                           href="?page={{ page_obj.next_page_number }}&search={{ search|urlencode }}&date={{ date_filter|urlencode }}&payment={{ payment_filter|urlencode }}">
+                            Next &raquo;
+                        </a>
+                    {% else %}
+                        <span class="pagination-btn disabled">
+                            Next &raquo;
+                        </span>
+                    {% endif %}
+
+                </div>
+            </div>
+
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="page-footer">
+            <p>
+                © {% now "Y" %} Supermarket AI.
+                Sales Management Dashboard.
+            </p>
+        </footer>
+
+    </main>
+
+    <!-- CHART DATA -->
+    {{ chart_labels|json_script:"sales-chart-labels" }}
+    {{ chart_values|json_script:"sales-chart-values" }}
+
+    <script>
+        const labelsElement = document.getElementById("sales-chart-labels");
+        const valuesElement = document.getElementById("sales-chart-values");
+
+        const chartLabels = JSON.parse(labelsElement.textContent);
+        const chartValues = JSON.parse(valuesElement.textContent);
+
+        const chartCanvas = document.getElementById("monthlySalesChart");
+
+        if (chartCanvas && typeof Chart !== "undefined") {
+            new Chart(chartCanvas, {
+                type: "bar",
+
+                data: {
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            type: "bar",
+                            label: "Monthly Sales",
+                            data: chartValues,
+                            backgroundColor: "rgba(59, 130, 246, 0.65)",
+                            borderColor: "#2563eb",
+                            borderWidth: 1,
+                            borderRadius: 5,
+                            maxBarThickness: 48,
+                            order: 2
+                        },
+                        {
+                            type: "line",
+                            label: "Sales Trend",
+                            data: chartValues,
+                            borderColor: "#f97316",
+                            backgroundColor: "#f97316",
+                            borderWidth: 3,
+                            pointRadius: 5,
+                            pointHoverRadius: 8,
+                            pointBackgroundColor: "#ffffff",
+                            pointBorderColor: "#f97316",
+                            pointBorderWidth: 3,
+                            tension: 0.3,
+                            fill: false,
+                            order: 1
+                        }
+                    ]
+                },
+
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+
+                    interaction: {
+                        mode: "index",
+                        intersect: false
+                    },
+
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: "top",
+                            align: "end",
+                            labels: {
+                                usePointStyle: true,
+                                padding: 18
+                            }
+                        },
+
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ": ₹" +
+                                        Number(context.raw).toLocaleString("en-IN", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        });
+                                }
+                            }
+                        }
+                    },
+
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grace: "10%",
+                            title: {
+                                display: true,
+                                text: "Sales Amount (₹)"
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return "₹" +
+                                        Number(value).toLocaleString("en-IN");
+                                }
+                            },
+                            grid: {
+                                color: "rgba(148, 163, 184, 0.18)"
+                            }
+                        },
+
+                        x: {
+                            title: {
+                                display: true,
+                                text: "Month"
+                            },
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                autoSkip: false,
+                                maxRotation: 0,
+                                minRotation: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>

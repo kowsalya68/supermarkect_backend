@@ -1,0 +1,171 @@
+<!-- SIDEBAR -->
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/sidebar.css' %}">
+
+<aside class="sidebar">
+
+    <!-- LOGO -->
+    <div class="logo">
+
+        <div class="logo-icon">
+            🛒
+        </div>
+
+        <h2>
+            Supermarket <span>AI</span>
+        </h2>
+
+    </div>
+
+
+    <!-- MAIN MENU -->
+
+    <div class="nav-title">
+        Main Menu
+    </div>
+
+
+    <ul class="nav-menu">
+
+        <!-- DASHBOARD -->
+
+        <li>
+            <a href="{% url 'dashboard' %}"
+               class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+
+                <span class="nav-icon">
+                    ▦
+                </span>
+
+                Dashboard
+
+            </a>
+        </li>
+
+
+        <!-- PRODUCTS -->
+
+        <li>
+            <a href="{% url 'products' %}"
+               class="{% if request.resolver_match.url_name == 'products' %}active{% endif %}">
+
+                <span class="nav-icon">
+                    📦
+                </span>
+
+                Products
+
+            </a>
+        </li>
+
+
+        <!-- SALES -->
+
+        <li>
+             <a href="{% url 'sales' %}"
+               class="{% if request.resolver_match.url_name == 'sales' %}active{% endif %}">
+
+                <span class="nav-icon">
+                    📊
+                </span>
+
+                Sales
+
+            </a>
+        </li>
+
+
+        <li>
+    <a href="{% url 'billing' %}"
+       class="{% if request.resolver_match.url_name == 'billing' %}active{% endif %}">
+
+        <span class="nav-icon">
+            🧾
+        </span>
+
+        Billing
+
+    </a>
+</li>
+
+
+        <!-- AI PREDICTION -->
+
+        <li>
+            <a href="{% url 'aiprediction' %}"
+       class="{% if request.resolver_match.url_name == 'aiprediction' %}active{% endif %}">
+
+
+                <span class="nav-icon">
+                    🤖
+                </span>
+
+                AI Prediction
+
+            </a>
+        </li>
+
+
+        <!-- PREDICTION HISTORY -->
+
+        <li>
+            <a href="{% url 'previousyear' %}"
+       class="{% if request.resolver_match.url_name == 'previousyear' %}active{% endif %}">
+
+                <span class="nav-icon">
+                    📋
+                </span>
+
+                Prediction History
+
+            </a>
+        </li>
+
+    </ul>
+
+<!-- LOGOUT -->
+
+<!-- LOGOUT -->
+<li class="logout-item">
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="logout-link">
+            <span class="nav-icon">🚪</span>
+            <span>Logout</span>
+        </button>
+    </form>
+</li>
+
+
+  
+
+
+
+
+    <!-- USER -->
+
+    <div class="sidebar-bottom">
+
+        <div class="user-box">
+
+            <div class="user-avatar">
+                KM
+            </div>
+
+            <div class="user-info">
+
+                <strong>
+                    Admin User
+                </strong>
+
+                <span>
+                    Supermarket Admin
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</aside>

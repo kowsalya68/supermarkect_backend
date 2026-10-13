@@ -1,0 +1,1101 @@
+
+/* =====================================================
+   SUPERMARKET AI - BUSINESS PREDICTION
+   ===================================================== */
+
+:root {
+    --primary: #5b5ce2;
+    --primary-light: #eeeeff;
+    --background: #f6f7fb;
+    --surface: #ffffff;
+    --text: #20243a;
+    --muted: #777e91;
+    --border: #e8eaf1;
+    --green: #159957;
+    --green-light: #e9f8ef;
+    --red: #dc3545;
+    --red-light: #fff0f0;
+    --orange: #c77912;
+    --orange-light: #fff5df;
+    --shadow: 0 5px 24px rgba(36, 42, 75, 0.055);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: var(--background);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+.app-layout {
+    margin-left: 250px;
+    min-height: 100vh;
+}
+
+.main-content {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 30px;
+}
+
+.top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 26px;
+}
+
+.top-header h1 {
+    font-size: 27px;
+    font-weight: 750;
+    letter-spacing: -0.7px;
+}
+
+.page-subtitle {
+    color: var(--muted);
+    margin-top: 4px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+}
+
+.live-indicator {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 4px var(--green-light);
+}
+
+.live-text {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.header-avatar {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-left: 8px;
+    border-radius: 12px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 800;
+}
+
+/* Forecast banner */
+
+.forecast-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 22px;
+    padding: 24px;
+    margin-bottom: 25px;
+    border-radius: 17px;
+    color: #fff;
+    background: linear-gradient(120deg, #4f50ce, #7976f5);
+    box-shadow: 0 8px 25px rgba(91, 92, 226, 0.16);
+}
+
+.banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 17px;
+}
+
+.banner-icon {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.17);
+    font-size: 25px;
+}
+
+.forecast-banner h2 {
+    font-size: 20px;
+    margin-bottom: 5px;
+}
+
+.forecast-banner p {
+    color: rgba(255, 255, 255, 0.88);
+}
+
+.forecast-banner strong {
+    color: #fff;
+}
+
+.banner-description {
+    margin-top: 5px;
+    font-size: 12px;
+}
+
+.refresh-button {
+    flex-shrink: 0;
+    padding: 11px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 9px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.14);
+    transition: background 0.2s;
+}
+
+.refresh-button:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* Summary cards */
+
+.forecast-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 25px;
+}
+
+.metric-card,
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    box-shadow: var(--shadow);
+}
+
+.metric-card {
+    padding: 21px;
+    min-width: 0;
+    border-top: 3px solid transparent;
+}
+
+.sales-card {
+    border-top-color: #5b5ce2;
+}
+
+.cost-card {
+    border-top-color: #e0a12d;
+}
+
+.profit-card {
+    border-top-color: var(--green);
+}
+
+.loss-card {
+    border-top-color: var(--red);
+}
+
+.risk-card {
+    border-top-color: #9a72e8;
+}
+
+.metric-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.metric-label {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.metric-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    color: var(--primary);
+    background: var(--primary-light);
+    font-size: 17px;
+}
+
+.metric-card h2 {
+    margin: 15px 0 6px;
+    font-size: clamp(19px, 1.6vw, 27px);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.profit-card h2,
+.profit-card .metric-footer {
+    color: var(--green);
+}
+
+.loss-card h2,
+.loss-card .metric-footer {
+    color: var(--red);
+}
+
+.metric-description {
+    color: var(--muted);
+    font-size: 12px;
+    min-height: 20px;
+}
+
+.metric-footer {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.risk-value {
+    font-size: 23px !important;
+}
+
+.risk-value.low {
+    color: var(--green);
+}
+
+.risk-value.medium {
+    color: var(--orange);
+}
+
+.risk-value.high {
+    color: var(--red);
+}
+
+/* General panels */
+
+.panel {
+    padding: 24px;
+    margin-bottom: 25px;
+    min-width: 0;
+}
+
+.panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 23px;
+}
+
+.panel-heading h2 {
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: -0.3px;
+}
+
+.panel-heading p {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.heading-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 20px;
+}
+
+/* Next-month profit and loss prediction */
+
+.prediction-panel {
+    border-top: 3px solid var(--primary);
+}
+
+.prediction-result {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 23px;
+    border: 1px solid transparent;
+    border-radius: 13px;
+    margin-bottom: 23px;
+}
+
+.result-profit {
+    background: var(--green-light);
+    border-color: #c9eed7;
+}
+
+.result-loss {
+    background: var(--red-light);
+    border-color: #ffd4d4;
+}
+
+.result-neutral {
+    background: #f0f2f7;
+    border-color: #e0e3eb;
+}
+
+.result-symbol {
+    display: grid;
+    place-items: center;
+    width: 49px;
+    height: 49px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    font-size: 27px;
+    font-weight: 800;
+}
+
+.result-profit .result-symbol {
+    background: #d1f1dd;
+    color: var(--green);
+}
+
+.result-loss .result-symbol {
+    background: #ffdddd;
+    color: var(--red);
+}
+
+.result-neutral .result-symbol {
+    background: #e0e4ef;
+    color: #636b80;
+}
+
+.result-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.result-text > span,
+.result-amount > span {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.result-text h3 {
+    margin: 3px 0 5px;
+    font-size: 17px;
+}
+
+.result-profit .result-text h3 {
+    color: var(--green);
+}
+
+.result-loss .result-text h3 {
+    color: var(--red);
+}
+
+.result-neutral .result-text h3 {
+    color: #596176;
+}
+
+.result-text p {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.result-amount {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.result-amount strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 23px;
+    overflow-wrap: anywhere;
+}
+
+.result-profit .result-amount strong {
+    color: var(--green);
+}
+
+.result-loss .result-amount strong {
+    color: var(--red);
+}
+
+.result-neutral .result-amount strong {
+    color: #596176;
+}
+
+/* Financial breakdown */
+
+.profit-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 15px;
+}
+
+.profit-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 17px;
+    background: #fafbfe;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    min-width: 0;
+}
+
+.profit-summary-item > span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.profit-summary-item strong {
+    font-size: 19px;
+    overflow-wrap: anywhere;
+}
+
+.revenue-value {
+    color: var(--primary);
+}
+
+.cost-value {
+    color: var(--orange);
+}
+
+.highlight-profit {
+    background: var(--green-light);
+    border-color: #c9eed7;
+}
+
+.highlight-profit strong {
+    color: var(--green);
+}
+
+.highlight-loss {
+    background: var(--red-light);
+    border-color: #ffd4d4;
+}
+
+.highlight-loss strong {
+    color: var(--red);
+}
+
+/* Profit margin */
+
+.margin-section {
+    margin-top: 25px;
+}
+
+.margin-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 11px;
+}
+
+.margin-heading > span {
+    font-weight: 650;
+}
+
+.margin-heading strong {
+    font-size: 16px;
+}
+
+.positive-margin {
+    color: var(--green);
+}
+
+.negative-margin {
+    color: var(--red);
+}
+
+.progress-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #eceef4;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 20px;
+    transition: width 0.3s ease;
+}
+
+.margin-profit {
+    background: linear-gradient(90deg, #2cbb73, #138b4c);
+}
+
+.margin-loss {
+    background: var(--red);
+}
+
+.small-note {
+    margin-top: 9px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* Advice */
+
+.prediction-advice {
+    margin-top: 22px;
+    padding: 17px 19px;
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    background: #f7f7ff;
+}
+
+.prediction-advice h3 {
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.prediction-advice p {
+    color: #5f6578;
+    font-size: 12px;
+}
+
+.prediction-advice .advice-profit {
+    color: #147d48;
+}
+
+.prediction-advice .advice-loss {
+    color: #c12d3a;
+}
+
+/* Investment allocation */
+
+.field-label {
+    display: block;
+    margin-bottom: 9px;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.investment-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 400px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.investment-input-wrap > span {
+    color: var(--primary);
+    font-weight: 800;
+}
+
+.investment-input-wrap input {
+    width: 100%;
+    min-width: 0;
+    padding: 12px 0;
+    border: none;
+    outline: none;
+    color: var(--text);
+    background: transparent;
+}
+
+.investment-input-wrap:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(91, 92, 226, 0.1);
+}
+
+.allocation-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 23px 28px;
+    margin-top: 25px;
+}
+
+.allocation-item {
+    min-width: 0;
+}
+
+.allocation-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 9px;
+    font-size: 12px;
+}
+
+.allocation-info strong {
+    margin-left: auto;
+}
+
+.allocation-dot {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--primary);
+}
+
+.allocation-track {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #eff0f6;
+}
+
+.allocation-fill {
+    height: 100%;
+    border-radius: 20px;
+    background: var(--primary);
+}
+
+.dairy-dot,
+.dairy-fill {
+    background: #4c9fe8;
+}
+
+.grocery-dot,
+.grocery-fill {
+    background: #8b65d8;
+}
+
+.vegetable-dot,
+.vegetable-fill {
+    background: #2ca66b;
+}
+
+.bakery-dot,
+.bakery-fill {
+    background: #dc9a3a;
+}
+
+.beverage-dot,
+.beverage-fill {
+    background: #22a8aa;
+}
+
+.snack-dot,
+.snack-fill {
+    background: #e47791;
+}
+
+.reserve-dot,
+.reserve-fill {
+    background: #7a8296;
+}
+
+.allocation-value {
+    display: block;
+    margin-top: 7px;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.allocation-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 26px;
+    padding-top: 17px;
+    border-top: 1px solid var(--border);
+}
+
+.allocation-total span {
+    color: var(--muted);
+}
+
+.allocation-total strong {
+    font-size: 20px;
+    color: var(--primary);
+}
+
+/* Tables */
+
+.table-heading {
+    margin-bottom: 20px;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 11px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.status-warning {
+    color: #a66909;
+    background: var(--orange-light);
+}
+
+.status-danger {
+    color: #c22c3b;
+    background: var(--red-light);
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    white-space: nowrap;
+}
+
+thead {
+    background: #f7f8fc;
+}
+
+th {
+    padding: 13px 14px;
+    color: #737b8e;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+td {
+    padding: 15px 14px;
+    border-bottom: 1px solid #eff0f5;
+    font-size: 12px;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: #fafaff;
+}
+
+.product-name {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.restock-number {
+    color: var(--green);
+    font-weight: 800;
+}
+
+.action-restock {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: var(--green-light);
+    color: var(--green);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.empty-state {
+    padding: 25px;
+    text-align: center;
+    color: var(--muted);
+    white-space: normal;
+}
+
+/* Overstock risk products */
+
+.risk-product-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 17px;
+}
+
+.risk-product-card {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.risk-product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.risk-product-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 13px;
+}
+
+.risk-product-icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #f0f1ff;
+    font-size: 19px;
+}
+
+.risk-badge {
+    padding: 4px 8px;
+    border-radius: 20px;
+    background: var(--orange-light);
+    color: var(--orange);
+    font-size: 10px;
+    font-weight: 750;
+}
+
+.risk-badge.high {
+    background: var(--red-light);
+    color: var(--red);
+}
+
+.risk-badge.low {
+    background: var(--green-light);
+    color: var(--green);
+}
+
+.risk-product-card h3 {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+}
+
+.risk-category {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.risk-product-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 18px 0;
+}
+
+.risk-product-stats > div {
+    padding: 11px;
+    background: #f8f9fc;
+    border-radius: 8px;
+}
+
+.risk-product-stats span {
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.risk-product-stats strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 16px;
+}
+
+.risk-recommendation {
+    color: #666e81;
+    font-size: 11px;
+}
+
+/* Recommendations */
+
+.recommendation-icon {
+    color: var(--primary);
+    font-size: 25px;
+}
+
+.recommendation-list {
+    display: grid;
+    gap: 16px;
+}
+
+.recommendation-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+}
+
+.recommendation-check {
+    display: grid;
+    place-items: center;
+    width: 29px;
+    height: 29px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--green-light);
+    color: var(--green);
+    font-weight: 800;
+}
+
+.recommendation-item strong {
+    font-size: 13px;
+}
+
+.recommendation-item p {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.disclaimer {
+    margin-top: 23px;
+    padding-top: 17px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.page-footer {
+    padding: 10px 0 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* Responsive layout */
+
+@media (max-width: 1200px) {
+    .main-content {
+        padding: 23px;
+    }
+
+    .forecast-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .risk-product-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .app-layout {
+        margin-left: 0;
+    }
+
+    .main-content {
+        padding: 20px;
+    }
+
+    .forecast-banner {
+        align-items: flex-start;
+    }
+
+    .allocation-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .main-content {
+        padding: 14px;
+    }
+
+    .top-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .top-header h1 {
+        font-size: 23px;
+    }
+
+    .header-right {
+        align-self: flex-start;
+    }
+
+    .forecast-banner {
+        flex-direction: column;
+        padding: 18px;
+    }
+
+    .forecast-banner h2 {
+        font-size: 17px;
+    }
+
+    .refresh-button {
+        width: 100%;
+    }
+
+    .forecast-cards {
+        grid-template-columns: 1fr;
+        gap: 13px;
+    }
+
+    .metric-card {
+        padding: 18px;
+    }
+
+    .panel {
+        padding: 17px;
+        margin-bottom: 17px;
+    }
+
+    .panel-heading h2 {
+        font-size: 16px;
+    }
+
+    .prediction-result {
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+    }
+
+    .result-text {
+        flex-basis: calc(100% - 65px);
+    }
+
+    .result-text h3 {
+        font-size: 15px;
+    }
+
+    .result-amount {
+        width: 100%;
+        padding-top: 12px;
+        border-top: 1px solid rgba(100, 100, 100, 0.15);
+        text-align: left;
+    }
+
+    .result-amount strong {
+        font-size: 21px;
+    }
+
+    .profit-summary {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .profit-summary-item {
+        padding: 14px;
+    }
+
+    .risk-product-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .table-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .allocation-total strong {
+        font-size: 17px;
+    }
+}

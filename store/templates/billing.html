@@ -1,0 +1,696 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing - Supermarket AI</title>
+    <link rel="stylesheet" href="{% static 'css/bill.css' %}">
+</head>
+<body>
+
+{% include 'sidebar.html' %}
+
+<main class="main-content">
+
+    <header class="page-header">
+        <div>
+            <h1>Billing Management</h1>
+            <p>Create bills, manage payments, and generate receipts.</p>
+        </div>
+        <div class="header-date" id="currentDate"></div>
+    </header>
+
+    {% csrf_token %}
+
+    <section class="billing-layout">
+
+        <!-- PRODUCTS -->
+        <div class="products-section">
+            <div class="section-heading">
+                <div>
+                    <h2>Products</h2>
+                    <p>Select products to add them to the bill.</p>
+                </div>
+                <span class="product-count">{{ products|length }} products</span>
+            </div>
+
+            <div class="search-box">
+                <span>⌕</span>
+                <input type="text" id="productSearch"
+                       placeholder="Search product name..."
+                       autocomplete="off">
+            </div>
+
+            <div class="category-filters">
+                <button type="button" class="category-btn active" data-category="all">All</button>
+                <button type="button" class="category-btn" data-category="vegetables">Vegetables</button>
+                <button type="button" class="category-btn" data-category="dairy">Dairy</button>
+                <button type="button" class="category-btn" data-category="grocery">Grocery</button>
+                <button type="button" class="category-btn" data-category="bakery">Bakery</button>
+                <button type="button" class="category-btn" data-category="beverages">Beverages</button>
+                <button type="button" class="category-btn" data-category="snacks">Snacks</button>
+                <button type="button" class="category-btn" data-category="personal-care">Personal Care</button>
+                <button type="button" class="category-btn" data-category="household">Household</button>
+            </div>
+
+            <div class="product-grid" id="productGrid">
+
+                {% for product in products %}
+                <article
+                    class="product-card"
+                    data-name="{{ product.name|lower }}"
+                    data-category="{{ product.category|slugify }}">
+
+                    <!-- CATEGORY-BASED PRODUCT ICON -->
+                    <div class="product-icon" aria-hidden="true">
+                        {% if product.category == "Vegetables" %}
+                            🥔
+                        {% elif product.category == "Dairy" %}
+                            🥛
+                        {% elif product.category == "Grocery" %}
+                            🌾
+                        {% elif product.category == "Bakery" %}
+                            🍞
+                        {% elif product.category == "Beverages" %}
+                            🧃
+                        {% elif product.category == "Snacks" %}
+                            🍪
+                        {% elif product.category == "Personal Care" %}
+                            🧴
+                        {% elif product.category == "Household" %}
+                            🧽
+                        {% else %}
+                            🛒
+                        {% endif %}
+                    </div>
+
+                    <div class="product-info">
+                        <h3>{{ product.name }}</h3>
+                        <p>{{ product.get_category_display }}</p>
+
+                        <div class="product-bottom">
+                            <strong>₹{{ product.price|floatformat:2 }}</strong>
+
+                            <button
+                                type="button"
+                                class="add-button"
+                                data-id="{{ product.id }}"
+                                data-name="{{ product.name }}"
+                                data-price="{{ product.price }}"
+                                data-stock="{{ product.stock }}"
+                                {% if product.stock <= 0 %}disabled{% endif %}>
+                                {% if product.stock > 0 %}
+                                    + Add
+                                {% else %}
+                                    Out of stock
+                                {% endif %}
+                            </button>
+                        </div>
+
+                        <small class="stock-label">
+                            Available: {{ product.stock }}
+                        </small>
+                    </div>
+                </article>
+
+                {% empty %}
+                <div class="empty-products">
+                    <span>📦</span>
+                    <h3>No products available</h3>
+                    <p>Add products through Product Management first.</p>
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+
+        <!-- CURRENT BILL -->
+        <aside class="bill-section">
+
+            <div class="bill-heading">
+                <div>
+                    <h2>Current Bill</h2>
+                    <p id="billNumber">New transaction</p>
+                </div>
+                <button type="button" class="clear-btn" id="clearBillBtn">Clear</button>
+            </div>
+
+            <div class="customer-field">
+                <label for="customerName">Customer name</label>
+                <input type="text" id="customerName"
+                       placeholder="Walk-in customer" maxlength="100">
+            </div>
+
+            <div class="bill-items-heading">
+                <span>Item details</span>
+                <span id="itemCount">0 items</span>
+            </div>
+
+            <div class="bill-items" id="billItems">
+                <div class="empty-bill">
+                    <span>🛍️</span>
+                    <p>Your bill is empty</p>
+                    <small>Add products to get started.</small>
+                </div>
+            </div>
+
+            <div class="bill-calculations">
+                <div class="calculation-row">
+                    <span>Subtotal</span>
+                    <strong id="subtotal">₹0.00</strong>
+                </div>
+
+                <div class="discount-row">
+                    <label for="discount">Discount (₹)</label>
+                    <input type="number" id="discount"
+                           min="0" step="0.01" value="0">
+                </div>
+
+                <div class="calculation-row">
+                    <span>Tax (5%)</span>
+                    <strong id="tax">₹0.00</strong>
+                </div>
+
+                <div class="calculation-row total-row">
+                    <span>Total amount</span>
+                    <strong id="total">₹0.00</strong>
+                </div>
+            </div>
+
+            <div class="payment-section">
+                <h3>Payment method</h3>
+
+                <div class="payment-options">
+                    <button type="button" class="payment-btn active" data-payment="Cash">
+                        <span>💵</span> Cash
+                    </button>
+                    <button type="button" class="payment-btn" data-payment="UPI">
+                        <span>📱</span> UPI
+                    </button>
+                    <button type="button" class="payment-btn" data-payment="Card">
+                        <span>💳</span> Card
+                    </button>
+                </div>
+
+                <label for="amountReceived" class="amount-label">
+                    Amount received (₹)
+                </label>
+                <input type="number" id="amountReceived"
+                       min="0" step="0.01"
+                       placeholder="Enter amount received">
+
+                <div class="change-row">
+                    <span>Change to return</span>
+                    <strong id="changeAmount">₹0.00</strong>
+                </div>
+            </div>
+
+            <button type="button" class="complete-btn" id="completeBtn">
+                Complete Bill <span>→</span>
+            </button>
+
+            <p class="secure-note">
+                🔒 Stock and payment totals are verified by the server.
+            </p>
+        </aside>
+
+    </section>
+</main>
+
+<!-- RECEIPT MODAL -->
+<div class="modal-overlay" id="receiptModal" aria-hidden="true">
+    <div class="receipt-modal">
+
+        <div class="receipt-header">
+            <div class="receipt-success">✓</div>
+            <h2>Bill Completed!</h2>
+            <p>Your transaction has been saved successfully.</p>
+        </div>
+
+        <div class="receipt-content" id="receiptContent">
+            <div class="receipt-store">
+                <h2>🛒 Supermarket AI</h2>
+                <p>Sales Receipt</p>
+            </div>
+
+            <div class="receipt-meta">
+                <p>Bill No: <strong id="receiptBillNo">-</strong></p>
+                <p>Date: <strong id="receiptDate">-</strong></p>
+                <p>Customer: <strong id="receiptCustomer">Walk-in Customer</strong></p>
+            </div>
+
+            <table class="receipt-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody id="receiptItems"></tbody>
+            </table>
+
+            <div class="receipt-totals">
+                <div><span>Subtotal</span><strong id="receiptSubtotal">₹0.00</strong></div>
+                <div><span>Discount</span><strong id="receiptDiscount">₹0.00</strong></div>
+                <div><span>Tax (5%)</span><strong id="receiptTax">₹0.00</strong></div>
+                <div class="receipt-grand-total"><span>Total</span><strong id="receiptTotal">₹0.00</strong></div>
+                <div><span>Payment</span><strong id="receiptPayment">Cash</strong></div>
+                <div><span>Received</span><strong id="receiptReceived">₹0.00</strong></div>
+                <div><span>Change</span><strong id="receiptChange">₹0.00</strong></div>
+            </div>
+
+            <p class="receipt-thanks">Thank you for shopping with us!</p>
+        </div>
+
+        <div class="receipt-actions">
+            <button type="button" class="print-btn" id="printReceiptBtn">🖨 Print Receipt</button>
+            <button type="button" class="close-btn" id="closeReceiptBtn">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let billItems = [];
+    let selectedPayment = "Cash";
+    let activeCategory = "all";
+    let isSubmitting = false;
+
+    const money = value =>
+        "₹" + Number(value || 0).toLocaleString("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+    const element = id => document.getElementById(id);
+
+    element("currentDate").textContent = new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    });
+
+    // ADD PRODUCTS
+    document.querySelectorAll(".add-button").forEach(button => {
+        button.addEventListener("click", () => {
+            addToBill(
+                button.dataset.id,
+                button.dataset.name,
+                button.dataset.price,
+                button.dataset.stock
+            );
+        });
+    });
+
+    function addToBill(productId, name, price, stock) {
+        productId = Number(productId);
+        price = Number(price);
+        stock = Number(stock);
+
+        const existing = billItems.find(item => item.productId === productId);
+
+        if (existing) {
+            if (existing.quantity >= stock) {
+                alert("Not enough stock available.");
+                return;
+            }
+            existing.quantity++;
+        } else {
+            if (stock <= 0) {
+                alert("This product is out of stock.");
+                return;
+            }
+
+            billItems.push({
+                productId,
+                name,
+                price,
+                quantity: 1,
+                stock
+            });
+        }
+
+        renderBill();
+    }
+
+    function changeQuantity(productId, change) {
+        const item = billItems.find(p => p.productId === Number(productId));
+        if (!item) return;
+
+        const quantity = item.quantity + change;
+
+        if (quantity <= 0) {
+            removeItem(productId);
+            return;
+        }
+
+        if (quantity > item.stock) {
+            alert("Only " + item.stock + " units are available.");
+            return;
+        }
+
+        item.quantity = quantity;
+        renderBill();
+    }
+
+    function removeItem(productId) {
+        billItems = billItems.filter(item => item.productId !== Number(productId));
+        renderBill();
+    }
+
+    // RENDER BILL ITEMS
+    function renderBill() {
+        const container = element("billItems");
+        container.replaceChildren();
+
+        if (billItems.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "empty-bill";
+
+            const icon = document.createElement("span");
+            icon.textContent = "🛍️";
+
+            const message = document.createElement("p");
+            message.textContent = "Your bill is empty";
+
+            const hint = document.createElement("small");
+            hint.textContent = "Add products to get started.";
+
+            empty.append(icon, message, hint);
+            container.appendChild(empty);
+        } else {
+            billItems.forEach(item => {
+                const row = document.createElement("div");
+                row.className = "bill-item";
+
+                const info = document.createElement("div");
+                info.className = "bill-item-info";
+
+                const name = document.createElement("h4");
+                name.textContent = item.name;
+
+                const price = document.createElement("p");
+                price.textContent = money(item.price) + " each";
+
+                info.append(name, price);
+
+                const controls = document.createElement("div");
+                controls.className = "quantity-controls";
+
+                const minus = document.createElement("button");
+                minus.type = "button";
+                minus.textContent = "−";
+                minus.setAttribute("aria-label", "Decrease quantity");
+                minus.addEventListener("click", () => changeQuantity(item.productId, -1));
+
+                const quantity = document.createElement("span");
+                quantity.textContent = item.quantity;
+
+                const plus = document.createElement("button");
+                plus.type = "button";
+                plus.textContent = "+";
+                plus.setAttribute("aria-label", "Increase quantity");
+                plus.addEventListener("click", () => changeQuantity(item.productId, 1));
+
+                controls.append(minus, quantity, plus);
+
+                const right = document.createElement("div");
+                right.className = "bill-item-right";
+
+                const total = document.createElement("strong");
+                total.textContent = money(item.price * item.quantity);
+
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "remove-item";
+                remove.textContent = "Remove";
+                remove.addEventListener("click", () => removeItem(item.productId));
+
+                right.append(total, remove);
+                row.append(info, controls, right);
+                container.appendChild(row);
+            });
+        }
+
+        const quantity = billItems.reduce((sum, item) => sum + item.quantity, 0);
+        element("itemCount").textContent =
+            quantity + (quantity === 1 ? " item" : " items");
+
+        updateTotals();
+    }
+
+    // CALCULATE SUBTOTAL, DISCOUNT, TAX, AND CHANGE
+    function updateTotals() {
+        const subtotal = billItems.reduce(
+            (sum, item) => sum + item.price * item.quantity, 0
+        );
+
+        const enteredDiscount = Number(element("discount").value) || 0;
+        const discount = Math.min(Math.max(0, enteredDiscount), subtotal);
+        const taxable = Math.max(0, subtotal - discount);
+        const tax = Math.round(taxable * 0.05 * 100) / 100;
+        const total = Math.round((taxable + tax) * 100) / 100;
+        const received = Math.max(0, Number(element("amountReceived").value) || 0);
+        const change = Math.max(0, received - total);
+
+        element("subtotal").textContent = money(subtotal);
+        element("tax").textContent = money(tax);
+        element("total").textContent = money(total);
+        element("changeAmount").textContent = money(change);
+    }
+
+    element("discount").addEventListener("input", updateTotals);
+    element("amountReceived").addEventListener("input", updateTotals);
+
+    // PAYMENT METHOD
+    document.querySelectorAll(".payment-btn").forEach(button => {
+        button.addEventListener("click", () => {
+            selectedPayment = button.dataset.payment;
+
+            document.querySelectorAll(".payment-btn").forEach(btn =>
+                btn.classList.remove("active")
+            );
+
+            button.classList.add("active");
+        });
+    });
+
+    // CATEGORY FILTER
+    document.querySelectorAll(".category-btn").forEach(button => {
+        button.addEventListener("click", () => {
+            activeCategory = button.dataset.category;
+
+            document.querySelectorAll(".category-btn").forEach(btn =>
+                btn.classList.remove("active")
+            );
+
+            button.classList.add("active");
+            filterProducts();
+        });
+    });
+
+    // PRODUCT SEARCH
+    element("productSearch").addEventListener("input", filterProducts);
+
+    function filterProducts() {
+        const search = element("productSearch").value.trim().toLowerCase();
+
+        document.querySelectorAll(".product-card").forEach(card => {
+            const matchesName = card.dataset.name.includes(search);
+            const matchesCategory =
+                activeCategory === "all" ||
+                card.dataset.category === activeCategory;
+
+            card.style.display = matchesName && matchesCategory ? "" : "none";
+        });
+    }
+
+    // CLEAR CURRENT BILL
+    element("clearBillBtn").addEventListener("click", () => {
+        if (!billItems.length) return;
+
+        if (!confirm("Clear all products from the current bill?")) return;
+
+        billItems = [];
+        element("discount").value = "0";
+        element("amountReceived").value = "";
+        renderBill();
+    });
+
+    // COMPLETE BILL
+    element("completeBtn").addEventListener("click", completeBill);
+
+    async function completeBill() {
+        if (isSubmitting) return;
+
+        if (billItems.length === 0) {
+            alert("Please add at least one product.");
+            return;
+        }
+
+        const discount = Number(element("discount").value || 0);
+        const received = Number(element("amountReceived").value || 0);
+        const subtotal = billItems.reduce(
+            (sum, item) => sum + item.price * item.quantity, 0
+        );
+
+        if (!Number.isFinite(discount) || discount < 0 || discount > subtotal) {
+            alert("Enter a valid discount that does not exceed the subtotal.");
+            return;
+        }
+
+        const taxable = subtotal - discount;
+        const expectedTotal = Math.round((taxable + taxable * 0.05) * 100) / 100;
+
+        if (!Number.isFinite(received) || received < expectedTotal) {
+            alert("Amount received must be at least " + money(expectedTotal));
+            return;
+        }
+
+        const payload = {
+            customer_name: element("customerName").value.trim(),
+            discount: discount.toFixed(2),
+            payment_method: selectedPayment,
+            amount_received: received.toFixed(2),
+            items: billItems.map(item => ({
+                product_id: item.productId,
+                quantity: item.quantity
+            }))
+        };
+
+        const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+        if (!csrfInput) {
+            alert("CSRF token not found. Refresh the page and try again.");
+            return;
+        }
+
+        const button = element("completeBtn");
+        isSubmitting = true;
+        button.disabled = true;
+        button.textContent = "Processing...";
+
+        try {
+            const response = await fetch("{% url 'complete_bill' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfInput.value
+                },
+                credentials: "same-origin",
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                alert(result.message || "Unable to complete the bill.");
+                return;
+            }
+
+            element("billNumber").textContent = "Bill #" + result.bill_number;
+            element("receiptBillNo").textContent = result.bill_number;
+            element("receiptDate").textContent = result.date;
+            element("receiptCustomer").textContent =
+                payload.customer_name || "Walk-in Customer";
+
+            element("receiptSubtotal").textContent = money(result.subtotal);
+            element("receiptDiscount").textContent = money(result.discount);
+            element("receiptTax").textContent = money(result.tax);
+            element("receiptTotal").textContent = money(result.total);
+            element("receiptPayment").textContent = result.payment_method;
+            element("receiptReceived").textContent = money(result.amount_received);
+            element("receiptChange").textContent = money(result.change_amount);
+
+            const receiptItems = element("receiptItems");
+            receiptItems.replaceChildren();
+
+            billItems.forEach(item => {
+                const row = document.createElement("tr");
+
+                [
+                    item.name,
+                    String(item.quantity),
+                    money(item.price),
+                    money(item.price * item.quantity)
+                ].forEach(value => {
+                    const cell = document.createElement("td");
+                    cell.textContent = value;
+                    row.appendChild(cell);
+                });
+
+                receiptItems.appendChild(row);
+            });
+
+            element("receiptModal").classList.add("show");
+            element("receiptModal").setAttribute("aria-hidden", "false");
+
+            billItems = [];
+            element("discount").value = "0";
+            element("amountReceived").value = "";
+            renderBill();
+
+        } catch (error) {
+            alert("Could not connect to the server. Please check your connection and try again.");
+        } finally {
+            isSubmitting = false;
+            button.disabled = false;
+            button.innerHTML = 'Complete Bill <span>→</span>';
+        }
+    }
+
+    // CLOSE RECEIPT
+    element("closeReceiptBtn").addEventListener("click", () => {
+        element("receiptModal").classList.remove("show");
+        element("receiptModal").setAttribute("aria-hidden", "true");
+        window.location.reload();
+    });
+
+    // PRINT RECEIPT
+    element("printReceiptBtn").addEventListener("click", printReceipt);
+
+    function printReceipt() {
+        const receipt = element("receiptContent").innerHTML;
+        const printWindow = window.open("", "_blank", "width=800,height=700");
+
+        if (!printWindow) {
+            alert("Please allow pop-ups to print the receipt.");
+            return;
+        }
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <title>Supermarket AI Receipt</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #222; }
+                    .receipt-store { text-align: center; margin-bottom: 20px; }
+                    .receipt-meta p { margin: 7px 0; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+                    th, td { border-bottom: 1px solid #ddd; padding: 8px 4px; text-align: left; }
+                    th { background: #f4f4f4; }
+                    .receipt-totals { margin-top: 18px; }
+                    .receipt-totals div { display: flex; justify-content: space-between; padding: 6px 0; }
+                    .receipt-grand-total { font-size: 18px; font-weight: bold; border-top: 1px solid #aaa; }
+                    .receipt-thanks { text-align: center; margin-top: 25px; }
+                    @media print { body { padding: 0; } }
+                </style>
+            </head>
+            <body>${receipt}</body>
+            </html>
+        `);
+
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    }
+
+    renderBill();
+</script>
+
+</body>
+</html>

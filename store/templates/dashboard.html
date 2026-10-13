@@ -1,0 +1,1326 @@
+```html
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Supermarket AI Dashboard</title>
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+
+    <style>
+        /* ================= DASHBOARD CHART ================= */
+
+        .chart-area {
+            position: relative;
+            cursor: crosshair;
+        }
+
+        .chart-svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        .sales-point {
+            fill: #fff;
+            stroke: #2563eb;
+            stroke-width: 3;
+            vector-effect: non-scaling-stroke;
+            pointer-events: none;
+            transition: r .12s ease;
+        }
+
+        .sales-point.active {
+            fill: #2563eb;
+            stroke: #fff;
+            stroke-width: 3;
+        }
+
+        .chart-tooltip {
+            position: absolute;
+            display: none;
+            z-index: 20;
+            pointer-events: none;
+            padding: 10px 13px;
+            border-radius: 8px;
+            background: #172033;
+            color: #fff;
+            box-shadow: 0 5px 18px #0003;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: nowrap;
+            transform: translate(-50%, calc(-100% - 14px));
+        }
+
+        .chart-tooltip strong,
+        .chart-tooltip span {
+            display: block;
+        }
+
+        .chart-tooltip strong {
+            color: #dbeafe;
+        }
+
+        .chart-tooltip span {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* ================= CHATBOT ================= */
+
+        .chat-toggle {
+            position: fixed;
+            right: 25px;
+            bottom: 25px;
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 15px 21px;
+            border: none;
+            border-radius: 30px;
+            background: #2563eb;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 20px #0003;
+            transition: .2s;
+        }
+
+        .chat-toggle:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+        }
+
+        .chat-box {
+            position: fixed;
+            right: 25px;
+            bottom: 90px;
+            z-index: 1000;
+            width: 380px;
+            max-width: calc(100vw - 30px);
+            height: 540px;
+            max-height: calc(100vh - 115px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            border-radius: 17px;
+            background: #fff;
+            box-shadow: 0 12px 40px #0003;
+            font-family: Arial, sans-serif;
+        }
+
+        .chat-box[hidden] {
+            display: none;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 16px;
+            background: #1e40af;
+            color: white;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-avatar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            border-radius: 12px;
+            background: #ffffff25;
+            font-size: 23px;
+        }
+
+        .chat-header strong,
+        .chat-header small {
+            display: block;
+        }
+
+        .chat-header strong {
+            font-size: 15px;
+        }
+
+        .chat-header small {
+            margin-top: 5px;
+            color: #dbeafe;
+            font-size: 11px;
+        }
+
+        .chat-close {
+            border: none;
+            background: transparent;
+            color: #fff;
+            font-size: 23px;
+            cursor: pointer;
+        }
+
+        .chat-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 15px;
+            background: #f0fdf4;
+            color: #166534;
+            border-bottom: 1px solid #dcfce7;
+            font-size: 11px;
+        }
+
+        .chat-status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+
+        .chat-messages {
+            flex: 1;
+            min-height: 0;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+
+        .chat-message {
+            max-width: 88%;
+            margin-bottom: 13px;
+            padding: 11px 13px;
+            border-radius: 13px;
+            font-size: 13px;
+            line-height: 1.65;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+
+        .chat-message.bot {
+            margin-right: auto;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            color: #1e293b;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-message.user {
+            margin-left: auto;
+            background: #2563eb;
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-message.error {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .chat-quick-title {
+            padding: 10px 12px 5px;
+            color: #64748b;
+            background: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+
+        .quick-questions {
+            display: flex;
+            gap: 7px;
+            padding: 8px 12px 12px;
+            overflow-x: auto;
+            background: #fff;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .quick-questions button {
+            flex-shrink: 0;
+            padding: 8px 11px;
+            border: 1px solid #bfdbfe;
+            border-radius: 18px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .quick-questions button:hover {
+            background: #dbeafe;
+        }
+
+        .chat-input-area {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            border-top: 1px solid #e2e8f0;
+            background: #fff;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            min-width: 0;
+            padding: 12px 15px;
+            border: 1px solid #cbd5e1;
+            border-radius: 25px;
+            outline: none;
+            font-size: 12px;
+        }
+
+        .chat-input-area input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px #2563eb15;
+        }
+
+        .chat-send {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 41px;
+            height: 41px;
+            flex-shrink: 0;
+            border: none;
+            border-radius: 50%;
+            background: #2563eb;
+            color: #fff;
+            font-size: 19px;
+            cursor: pointer;
+        }
+
+        .chat-send:disabled {
+            opacity: .55;
+            cursor: wait;
+        }
+
+        .chat-footer-note {
+            padding: 0 10px 9px;
+            background: #fff;
+            color: #94a3b8;
+            text-align: center;
+            font-size: 10px;
+        }
+
+        .chat-message a {
+            color: #2563eb;
+        }
+
+        @media (max-width: 480px) {
+            .chat-toggle {
+                right: 15px;
+                bottom: 15px;
+                padding: 13px 17px;
+            }
+
+            .chat-box {
+                right: 15px;
+                bottom: 75px;
+                width: calc(100vw - 30px);
+                height: min(540px, calc(100vh - 95px));
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+{% include 'sidebar.html' %}
+
+<main class="main">
+
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <h1>Dashboard</h1>
+            <p>Supermarket sales and AI prediction overview</p>
+        </div>
+
+        <div class="header-right">
+            <div class="date-box">
+                📅 <span id="currentDate">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- WELCOME -->
+    <section class="welcome">
+        <h2>Welcome back, Admin! 👋</h2>
+        <p>
+            Monitor your supermarket performance and use
+            AI-powered predictions to understand your upcoming sales.
+        </p>
+    </section>
+
+    <!-- SUMMARY CARDS -->
+    <section class="summary-grid">
+
+        <div class="summary-card">
+            <div class="card-top">
+                <div class="card-icon icon-blue">📦</div>
+                <span class="card-label">Products</span>
+            </div>
+            <div class="card-value" id="totalProducts">0</div>
+            <div class="card-change change-neutral" id="productChange">
+                Total products
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-top">
+                <div class="card-icon icon-green">🏷️</div>
+                <span class="card-label">Categories</span>
+            </div>
+            <div class="card-value" id="totalCategories">0</div>
+            <div class="card-change change-neutral">Product categories</div>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-top">
+                <div class="card-icon icon-orange">💰</div>
+                <span class="card-label">Total Sales</span>
+            </div>
+            <div class="card-value" id="totalSales">₹0</div>
+            <div class="card-change change-neutral" id="salesChange">
+                0.00% from last month
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-top">
+                <div class="card-icon icon-red">⚠️</div>
+                <span class="card-label">Low Stock</span>
+            </div>
+            <div class="card-value" id="lowStock">0</div>
+            <div class="card-change change-neutral" id="stockMessage">
+                No products need attention
+            </div>
+        </div>
+
+    </section>
+
+    <!-- MONTHLY SALES AND AI PREDICTION -->
+    <section class="content-grid">
+
+        <!-- SALES CHART -->
+        <div class="panel">
+            <div class="panel-header">
+                <h3>Monthly Sales</h3>
+                <span>Last 6 months</span>
+            </div>
+
+            <div class="panel-body">
+                <div class="chart-container">
+
+                    <div class="chart-y-axis">
+                        <span id="axisTop">₹0</span>
+                        <span id="axis75">₹0</span>
+                        <span id="axis50">₹0</span>
+                        <span id="axis25">₹0</span>
+                        <span>₹0</span>
+                    </div>
+
+                    <div class="chart-area" id="chartArea">
+                        <svg
+                            id="salesChart"
+                            class="chart-svg"
+                            viewBox="0 0 600 205"
+                            preserveAspectRatio="none"
+                            role="img"
+                            aria-label="Monthly sales chart"
+                        >
+                            <polyline
+                                id="salesLine"
+                                points=""
+                                fill="none"
+                                stroke="#2563eb"
+                                stroke-width="3"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+
+                            <polyline
+                                id="salesHitLine"
+                                points=""
+                                fill="none"
+                                stroke="transparent"
+                                stroke-width="22"
+                                pointer-events="stroke"
+                            />
+
+                            <g id="salesPoints"></g>
+                        </svg>
+
+                        <div
+                            id="chartTooltip"
+                            class="chart-tooltip"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <strong id="tooltipMonth">Month</strong>
+                            <span id="tooltipSales">Sales: ₹0</span>
+                        </div>
+                    </div>
+
+                    <div class="chart-labels" id="chartLabels">
+                        <span>---</span><span>---</span><span>---</span>
+                        <span>---</span><span>---</span><span>---</span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- AI SALES PREDICTION -->
+        <div class="panel ai-card">
+            <div class="panel-header ai-header">
+                <h3>🤖 AI Sales Prediction</h3>
+                <span class="ai-badge">✨ AI Powered</span>
+            </div>
+
+            <div class="panel-body" id="predictionPanel">
+                <div class="prediction-empty">
+                    <div class="prediction-empty-icon">🤖</div>
+                    <h3>No Prediction Available</h3>
+                    <p>Run an AI prediction to forecast next month's sales.</p>
+                    <a href="{% url 'aiprediction' %}" class="predict-button">
+                        Start Prediction →
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- PRODUCT OVERVIEW -->
+    <section class="panel products-panel">
+
+        <div class="panel-header">
+            <h3>Product Overview</h3>
+            <a href="{% url 'products' %}">View all products →</a>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="product-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Monthly Sales</th>
+                        <th>Stock</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody id="productTableBody">
+                    <tr>
+                        <td colspan="6" class="empty-table">
+                            <div class="empty-icon">📦</div>
+                            <p>Loading products...</p>
+                            <span>Please wait.</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- AI BANNER -->
+    <section class="ai-banner">
+        <div class="ai-banner-left">
+            <div class="ai-banner-icon">🤖</div>
+            <div>
+                <h3>Ready to predict next month's sales?</h3>
+                <p>
+                    Use your supermarket historical sales data
+                    to generate a business forecast.
+                </p>
+            </div>
+        </div>
+
+        <a href="{% url 'aiprediction' %}" class="ai-banner-button">
+            Start Prediction →
+        </a>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        © 2026 Supermarket AI Prediction System. All rights reserved.
+    </footer>
+
+</main>
+
+<!-- ========================================= -->
+<!-- FLOATING AI CHATBOT -->
+<!-- ========================================= -->
+
+<button
+    id="chatToggle"
+    class="chat-toggle"
+    type="button"
+    aria-controls="chatBox"
+    aria-expanded="false"
+>
+    🤖 Ask Supermarket AI
+</button>
+
+<div id="chatBox" class="chat-box" role="dialog"
+     aria-label="Supermarket AI chatbot" hidden>
+
+    <div class="chat-header">
+        <div class="chat-header-info">
+            <div class="chat-avatar">🤖</div>
+            <div>
+                <strong>Supermarket AI</strong>
+                <small>Your business data assistant</small>
+            </div>
+        </div>
+        <button
+            id="chatClose"
+            class="chat-close"
+            type="button"
+            aria-label="Close chatbot"
+        >×</button>
+    </div>
+
+    <div class="chat-status">
+        <span class="chat-status-dot"></span>
+        Ask about your supermarket data
+    </div>
+
+    <div id="chatMessages" class="chat-messages" aria-live="polite">
+        <div class="chat-message bot">
+            Hello Admin! 👋
+
+            I can help you understand your supermarket business.
+
+            Try asking about:
+            • Next month's predicted sales
+            • Profit or loss
+            • Products needing restocking
+            • Top-selling products
+            • This month's sales
+        </div>
+    </div>
+
+    <div class="chat-quick-title">Suggested questions</div>
+
+    <div class="quick-questions">
+        <button type="button" data-question="Predict next month's sales">
+            📈 Sales prediction
+        </button>
+
+        <button type="button" data-question="Will I make a profit or loss next month?">
+            💰 Profit or loss
+        </button>
+
+        <button type="button" data-question="Which products need restocking?">
+            📦 Restock
+        </button>
+
+        <button type="button" data-question="Which products have the highest sales?">
+            🏆 Top products
+        </button>
+
+        <button type="button" data-question="What are my sales this month?">
+            📊 Monthly sales
+        </button>
+    </div>
+
+    <form id="chatForm" class="chat-input-area">
+        {% csrf_token %}
+        <input
+            id="chatInput"
+            type="text"
+            placeholder="Ask about your supermarket..."
+            maxlength="250"
+            autocomplete="off"
+            aria-label="Your question"
+            required
+        >
+        <button
+            type="submit"
+            id="chatSend"
+            class="chat-send"
+            aria-label="Send message"
+        >➤</button>
+    </form>
+
+    <div class="chat-footer-note">
+        Answers are based on available supermarket records.
+    </div>
+</div>
+
+<script>
+/* =========================================
+   NUMBER AND CURRENCY FORMATTING
+========================================= */
+
+function formatNumber(value) {
+    return new Intl.NumberFormat("en-IN").format(Number(value || 0));
+}
+
+function formatCurrency(value) {
+    const amount = Number(value || 0);
+
+    if (amount >= 10000000) {
+        return "₹" + (amount / 10000000).toFixed(2) + "Cr";
+    }
+
+    if (amount >= 100000) {
+        return "₹" + (amount / 100000).toFixed(2) + "L";
+    }
+
+    if (amount >= 1000) {
+        return "₹" + (amount / 1000).toFixed(1) + "K";
+    }
+
+    return "₹" + formatNumber(amount);
+}
+
+function formatExactCurrency(value) {
+    return "₹" + new Intl.NumberFormat("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(Number(value || 0));
+}
+
+/* =========================================
+   DATE
+========================================= */
+
+function updateDate() {
+    document.getElementById("currentDate").textContent =
+        new Date().toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
+}
+
+/* =========================================
+   SUMMARY CARDS
+========================================= */
+
+function updateSummary(summary) {
+    document.getElementById("totalProducts").textContent =
+        formatNumber(summary.total_products);
+
+    document.getElementById("totalCategories").textContent =
+        formatNumber(summary.total_categories);
+
+    document.getElementById("totalSales").textContent =
+        formatCurrency(summary.total_sales);
+
+    document.getElementById("lowStock").textContent =
+        formatNumber(summary.low_stock);
+
+    const growth = Number(summary.sales_growth || 0);
+    const salesChange = document.getElementById("salesChange");
+
+    if (growth > 0) {
+        salesChange.textContent = "↑ " + growth.toFixed(2) +
+            "% from last month";
+        salesChange.className = "card-change change-up";
+    } else if (growth < 0) {
+        salesChange.textContent = "↓ " + Math.abs(growth).toFixed(2) +
+            "% from last month";
+        salesChange.className = "card-change change-down";
+    } else {
+        salesChange.textContent = "0.00% from last month";
+        salesChange.className = "card-change change-neutral";
+    }
+
+    const lowStock = Number(summary.low_stock || 0);
+    const outOfStock = Number(summary.out_of_stock || 0);
+    const stockMessage = document.getElementById("stockMessage");
+
+    if (lowStock + outOfStock > 0) {
+        stockMessage.textContent = lowStock + " low stock, " +
+            outOfStock + " out of stock";
+        stockMessage.className = "card-change change-down";
+    } else {
+        stockMessage.textContent = "Stock levels look good";
+        stockMessage.className = "card-change change-neutral";
+    }
+}
+
+/* =========================================
+   INTERACTIVE SALES CHART
+========================================= */
+
+function updateSalesChart(data) {
+    const svg = document.getElementById("salesChart");
+    const line = document.getElementById("salesLine");
+    const hitLine = document.getElementById("salesHitLine");
+    const pointsGroup = document.getElementById("salesPoints");
+    const labels = document.getElementById("chartLabels");
+    const chartArea = document.getElementById("chartArea");
+
+    const tooltip = document.getElementById("chartTooltip");
+    const tooltipMonth = document.getElementById("tooltipMonth");
+    const tooltipSales = document.getElementById("tooltipSales");
+
+    tooltip.style.display = "none";
+    pointsGroup.innerHTML = "";
+
+    if (!Array.isArray(data) || data.length === 0) {
+        line.setAttribute("points", "");
+        hitLine.setAttribute("points", "");
+
+        labels.innerHTML =
+            "<span>---</span>".repeat(6);
+
+        ["axisTop", "axis75", "axis50", "axis25"].forEach(id => {
+            document.getElementById(id).textContent = "₹0";
+        });
+
+        return;
+    }
+
+    const chartData = data.slice(-6);
+    const values = chartData.map(item => Number(item.sales || 0));
+    const maxValue = Math.max(...values, 1);
+
+    const width = 600;
+    const height = 205;
+    const left = 8;
+    const right = 8;
+    const top = 15;
+    const bottom = 15;
+
+    const usableWidth = width - left - right;
+    const usableHeight = height - top - bottom;
+
+    const graphPoints = chartData.map((item, index) => ({
+        x: chartData.length === 1
+            ? width / 2
+            : left + (index / (chartData.length - 1)) * usableWidth,
+        y: top + usableHeight -
+            (Number(item.sales || 0) / maxValue) * usableHeight,
+        month: item.month,
+        sales: Number(item.sales || 0)
+    }));
+
+    const coordinates = graphPoints
+        .map(point => `${point.x},${point.y}`)
+        .join(" ");
+
+    line.setAttribute("points", coordinates);
+    hitLine.setAttribute("points", coordinates);
+
+    graphPoints.forEach((point, index) => {
+        const circle = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "circle"
+        );
+
+        circle.setAttribute("cx", point.x);
+        circle.setAttribute("cy", point.y);
+        circle.setAttribute("r", "4");
+        circle.setAttribute("class", "sales-point");
+        circle.dataset.index = index;
+
+        pointsGroup.appendChild(circle);
+    });
+
+    labels.innerHTML = "";
+
+    chartData.forEach(item => {
+        const span = document.createElement("span");
+        span.textContent = item.month;
+        labels.appendChild(span);
+    });
+
+    document.getElementById("axisTop").textContent =
+        formatCurrency(maxValue);
+
+    document.getElementById("axis75").textContent =
+        formatCurrency(maxValue * .75);
+
+    document.getElementById("axis50").textContent =
+        formatCurrency(maxValue * .50);
+
+    document.getElementById("axis25").textContent =
+        formatCurrency(maxValue * .25);
+
+    function showNearestPoint(event) {
+        const matrix = svg.getScreenCTM();
+        if (!matrix) return;
+
+        const cursor = svg.createSVGPoint();
+        cursor.x = event.clientX;
+        cursor.y = event.clientY;
+
+        const localCursor = cursor.matrixTransform(matrix.inverse());
+
+        let nearestPoint = null;
+        let nearestIndex = -1;
+        let shortestDistance = Infinity;
+
+        graphPoints.forEach((point, index) => {
+            const distance = Math.hypot(
+                localCursor.x - point.x,
+                localCursor.y - point.y
+            );
+
+            if (distance < shortestDistance) {
+                shortestDistance = distance;
+                nearestPoint = point;
+                nearestIndex = index;
+            }
+        });
+
+        if (!nearestPoint || shortestDistance > 35) {
+            tooltip.style.display = "none";
+            return;
+        }
+
+        pointsGroup.querySelectorAll(".sales-point").forEach(
+            (circle, index) => {
+                const active = index === nearestIndex;
+                circle.classList.toggle("active", active);
+                circle.setAttribute("r", active ? "7" : "4");
+            }
+        );
+
+        tooltipMonth.textContent = nearestPoint.month;
+        tooltipSales.textContent =
+            "Sales: " + formatExactCurrency(nearestPoint.sales);
+
+        const areaRect = chartArea.getBoundingClientRect();
+        const svgRect = svg.getBoundingClientRect();
+
+        let x = svgRect.left +
+            (nearestPoint.x / width) * svgRect.width - areaRect.left;
+
+        let y = svgRect.top +
+            (nearestPoint.y / height) * svgRect.height - areaRect.top;
+
+        x = Math.max(90, Math.min(x, areaRect.width - 90));
+
+        tooltip.style.left = x + "px";
+        tooltip.style.top = y + "px";
+        tooltip.style.transform = y < 65
+            ? "translate(-50%, 14px)"
+            : "translate(-50%, calc(-100% - 14px))";
+
+        tooltip.style.display = "block";
+    }
+
+    if (svg._salesMouseMove) {
+        svg.removeEventListener("mousemove", svg._salesMouseMove);
+        svg.removeEventListener("mouseleave", svg._salesMouseLeave);
+    }
+
+    svg._salesMouseMove = showNearestPoint;
+
+    svg._salesMouseLeave = function () {
+        tooltip.style.display = "none";
+
+        pointsGroup.querySelectorAll(".sales-point").forEach(circle => {
+            circle.classList.remove("active");
+            circle.setAttribute("r", "4");
+        });
+    };
+
+    svg.addEventListener("mousemove", svg._salesMouseMove);
+    svg.addEventListener("mouseleave", svg._salesMouseLeave);
+
+    svg.onclick = showNearestPoint;
+}
+
+/* =========================================
+   AI PREDICTION PANEL
+========================================= */
+
+function updatePrediction(prediction) {
+    const panel = document.getElementById("predictionPanel");
+
+    if (!prediction) {
+        panel.innerHTML = `
+            <div class="prediction-empty">
+                <div class="prediction-empty-icon">🤖</div>
+                <h3>No Prediction Available</h3>
+                <p>Run an AI prediction to forecast next month's sales.</p>
+                <a href="{% url 'aiprediction' %}" class="predict-button">
+                    Start Prediction →
+                </a>
+            </div>`;
+        return;
+    }
+
+    const predictedSales = Number(prediction.predicted_sales || 0);
+    const growth = Number(
+        prediction.growth ?? prediction.predicted_growth ?? 0
+    );
+    const previousSales = Number(prediction.previous_sales || 0);
+    const month = prediction.month ||
+        prediction.forecast_month || "Next month";
+    const confidence = prediction.confidence;
+    const risk = prediction.risk_level || "Not calculated";
+
+    panel.innerHTML = "";
+
+    const content = document.createElement("div");
+    content.className = "prediction-main";
+
+    const label = document.createElement("div");
+    label.className = "prediction-label";
+    label.textContent = "Predicted Sales - Next Month";
+
+    const value = document.createElement("div");
+    value.className = "prediction-value";
+    value.textContent = formatCurrency(predictedSales);
+
+    const sub = document.createElement("div");
+    sub.className = "prediction-sub";
+    sub.textContent =
+        (growth >= 0 ? "↑ " : "↓ ") +
+        Math.abs(growth).toFixed(2) + "% expected growth";
+
+    content.append(label, value, sub);
+    panel.appendChild(content);
+
+    const details = document.createElement("div");
+    details.className = "prediction-details";
+
+    const rows = [
+        ["Previous Sales", formatCurrency(previousSales)],
+        ["Predicted Growth", growth.toFixed(2) + "%"],
+        ["Prediction Confidence",
+            confidence == null ? "N/A" : Number(confidence).toFixed(0) + "%"],
+        ["Forecast Period", month],
+        ["Risk Level", risk]
+    ];
+
+    rows.forEach(([heading, result]) => {
+        const row = document.createElement("div");
+        row.className = "detail-row";
+
+        const first = document.createElement("span");
+        first.textContent = heading;
+
+        const second = document.createElement("span");
+        second.textContent = result;
+
+        row.append(first, second);
+        details.appendChild(row);
+    });
+
+    panel.appendChild(details);
+
+    const link = document.createElement("a");
+    link.href = "{% url 'aiprediction' %}";
+    link.className = "predict-button";
+    link.textContent = "🔮 View AI Prediction";
+    panel.appendChild(link);
+}
+
+/* =========================================
+   PRODUCT ICONS AND STATUS
+========================================= */
+
+function getProductIcon(category) {
+    const icons = {
+        "Vegetables": "🥦",
+        "Dairy": "🥛",
+        "Grocery": "🍚",
+        "Bakery": "🍞",
+        "Beverages": "🥤",
+        "Snacks": "🍿",
+        "Personal Care": "🧴",
+        "Household": "🧹"
+    };
+
+    return icons[category] || "📦";
+}
+
+function getStatusClass(status) {
+    if (status === "In Stock") return "status-good";
+    if (status === "Low Stock") return "status-low";
+    return "status-medium";
+}
+
+/* =========================================
+   PRODUCT TABLE
+========================================= */
+
+function updateProducts(products) {
+    const tbody = document.getElementById("productTableBody");
+    tbody.innerHTML = "";
+
+    if (!Array.isArray(products) || products.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="empty-table">
+                    <div class="empty-icon">📦</div>
+                    <p>No products available</p>
+                    <span>Add products to see them here.</span>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    products.forEach(product => {
+        const tr = document.createElement("tr");
+
+        const productCell = document.createElement("td");
+        const productName = document.createElement("div");
+        productName.className = "product-name";
+
+        const icon = document.createElement("div");
+        icon.className = "product-image";
+        icon.textContent = getProductIcon(product.category);
+
+        const info = document.createElement("div");
+        info.className = "product-info";
+
+        const name = document.createElement("strong");
+        name.textContent = product.name || "Unnamed product";
+
+        const sku = document.createElement("span");
+        sku.textContent = product.sku || "";
+
+        info.append(name, sku);
+        productName.append(icon, info);
+        productCell.appendChild(productName);
+
+        const categoryCell = document.createElement("td");
+        categoryCell.textContent = product.category || "Uncategorized";
+
+        const priceCell = document.createElement("td");
+        priceCell.textContent = formatExactCurrency(product.price);
+
+        const salesCell = document.createElement("td");
+        salesCell.textContent = formatCurrency(product.sales);
+
+        const stockCell = document.createElement("td");
+        stockCell.textContent = formatNumber(product.stock);
+
+        const statusCell = document.createElement("td");
+        const status = document.createElement("span");
+        status.className = "status " +
+            getStatusClass(product.stock_status);
+        status.textContent = product.stock_status || "Unknown";
+
+        statusCell.appendChild(status);
+
+        tr.append(
+            productCell,
+            categoryCell,
+            priceCell,
+            salesCell,
+            stockCell,
+            statusCell
+        );
+
+        tbody.appendChild(tr);
+    });
+}
+
+/* =========================================
+   LOAD DASHBOARD DATA
+========================================= */
+
+async function loadDashboard() {
+    try {
+        const response = await fetch(
+            "{% url 'dashboard_api' %}",
+            {
+                method: "GET",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json"
+                },
+                credentials: "same-origin"
+            }
+        );
+
+        if (response.redirected) {
+            window.location.href = response.url;
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error("Dashboard API returned " + response.status);
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error("Dashboard API reported failure");
+        }
+
+        updateSummary(data.summary || {});
+        updateSalesChart(data.monthly_sales || []);
+        updatePrediction(data.prediction || null);
+        updateProducts(data.products || []);
+
+    } catch (error) {
+        console.error("Dashboard loading error:", error);
+
+        const tbody = document.getElementById("productTableBody");
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="empty-table">
+                    <div class="empty-icon">⚠️</div>
+                    <p>Unable to load dashboard data</p>
+                    <span>Check your Django server, login session and dashboard API.</span>
+                </td>
+            </tr>`;
+    }
+}
+
+/* =========================================
+   CHATBOT CONTROLS
+========================================= */
+
+const chatToggle = document.getElementById("chatToggle");
+const chatBox = document.getElementById("chatBox");
+const chatClose = document.getElementById("chatClose");
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const chatMessages = document.getElementById("chatMessages");
+const chatSend = document.getElementById("chatSend");
+
+chatToggle.addEventListener("click", () => {
+    chatBox.hidden = !chatBox.hidden;
+    chatToggle.setAttribute("aria-expanded", String(!chatBox.hidden));
+
+    if (!chatBox.hidden) {
+        chatInput.focus();
+    }
+});
+
+chatClose.addEventListener("click", () => {
+    chatBox.hidden = true;
+    chatToggle.setAttribute("aria-expanded", "false");
+    chatToggle.focus();
+});
+
+function addChatMessage(message, type) {
+    const div = document.createElement("div");
+    div.className = "chat-message " + type;
+    div.textContent = message;
+
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    return div;
+}
+
+function getCookie(name) {
+    const cookies = document.cookie ? document.cookie.split(";") : [];
+
+    for (const cookie of cookies) {
+        const item = cookie.trim();
+
+        if (item.startsWith(name + "=")) {
+            return decodeURIComponent(item.substring(name.length + 1));
+        }
+    }
+
+    return "";
+}
+
+async function askSupermarketAI(question) {
+    question = question.trim();
+
+    if (!question || chatSend.disabled) return;
+
+    addChatMessage(question, "user");
+    chatInput.value = "";
+    chatSend.disabled = true;
+
+    const waiting = addChatMessage(
+        "Checking your supermarket data...",
+        "bot"
+    );
+
+    try {
+        const response = await fetch(
+            "{% url 'dashboard_chat_api' %}",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json"
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                    message: question
+                })
+            }
+        );
+
+        const data = await response.json();
+        waiting.remove();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Unable to answer your question.");
+        }
+
+        addChatMessage(
+            data.answer || "No answer was returned.",
+            "bot"
+        );
+
+    } catch (error) {
+        waiting.remove();
+
+        addChatMessage(
+            "I couldn't retrieve the answer. Please check the Django chatbot URL and server logs.",
+            "bot error"
+        );
+
+        console.error("Chatbot error:", error);
+
+    } finally {
+        chatSend.disabled = false;
+        chatInput.focus();
+    }
+}
+
+chatForm.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const question = chatInput.value.trim();
+
+    if (question) {
+        askSupermarketAI(question);
+    }
+});
+
+document.querySelectorAll(".quick-questions button").forEach(button => {
+    button.addEventListener("click", () => {
+        askSupermarketAI(button.dataset.question);
+    });
+});
+
+/* =========================================
+   START DASHBOARD
+========================================= */
+
+updateDate();
+loadDashboard();
+</script>
+
+</body>
+</html>

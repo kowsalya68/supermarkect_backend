@@ -1,0 +1,392 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previous Year Sales Report | Supermarket AI</title>
+
+    <link rel="stylesheet" href="{% static 'css/sidebar.css' %}">
+    <link rel="stylesheet" href="{% static 'css/previousyear.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="page-wrapper">
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+        <header class="page-header">
+            <div>
+                <h1>Previous Year Sales Report</h1>
+                <p>Analyze sales, estimated costs, profit and business growth.</p>
+            </div>
+
+           
+<a class="export-btn"
+   href="{% url 'export_previousyear' %}?year={{ selected_year }}">
+    <span>📊</span> Export to Excel
+</a>
+
+        </header>
+
+        <form method="get" class="filter-card">
+            <div class="filter-group">
+                <label for="reportYear">Report year</label>
+                <select id="reportYear" name="year">
+                    {% for year in available_years %}
+                    <option value="{{ year }}"
+                        {% if year == selected_year %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="compareYear">Compare with</label>
+                <select id="compareYear" name="compare_year">
+                    {% for year in available_years %}
+                    <option value="{{ year }}"
+                        {% if year == compare_year %}selected{% endif %}>
+                        {{ year }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="apply-btn">Apply filters</button>
+
+            <div class="report-period">
+                <span>📅</span>
+                <div>
+                    <small>Report period</small>
+                    <strong>Jan – Dec {{ selected_year }}</strong>
+                </div>
+            </div>
+        </form>
+
+        <section class="summary-grid">
+            <article class="summary-card">
+                <div class="summary-top">
+                    <span class="summary-icon sales-icon">₹</span>
+                    <span class="growth {% if growth >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ growth|floatformat:1 }}%
+                    </span>
+                </div>
+                <span class="summary-label">Total Sales</span>
+                <h2>₹{{ report.total_revenue|floatformat:2 }}</h2>
+                <p>Compared with {{ compare_year }}</p>
+            </article>
+
+            <article class="summary-card">
+                <div class="summary-top">
+                    <span class="summary-icon profit-icon">↗</span>
+                </div>
+                <span class="summary-label">Estimated Profit</span>
+                <h2>₹{{ report.total_profit|floatformat:2 }}</h2>
+                <p>Revenue minus estimated product cost</p>
+            </article>
+
+            <article class="summary-card">
+                <div class="summary-top">
+                    <span class="summary-icon average-icon">▥</span>
+                </div>
+                <span class="summary-label">Average Monthly Sales</span>
+                <h2>₹{{ report.average_monthly_sales|floatformat:2 }}</h2>
+                <p>Annual revenue divided by 12</p>
+            </article>
+
+            <article class="summary-card">
+                <div class="summary-top">
+                    <span class="summary-icon best-icon">★</span>
+                    <span class="best-label">Best month</span>
+                </div>
+                <span class="summary-label">Highest Sales</span>
+                {% if report.best_month and report.best_month.sales > 0 %}
+                    <h2>{{ report.best_month.month }}</h2>
+                    <p>₹{{ report.best_month.sales|floatformat:2 }}</p>
+                {% else %}
+                    <h2>—</h2>
+                    <p>No sales recorded</p>
+                {% endif %}
+            </article>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <h2>Monthly Sales Performance</h2>
+                    <p>Compare monthly revenue for the selected years.</p>
+                </div>
+                <div class="chart-legend">
+                    <span><i class="legend-blue"></i>{{ selected_year }}</span>
+                    <span><i class="legend-green"></i>{{ compare_year }}</span>
+                </div>
+            </div>
+
+            <div class="sales-chart-layout">
+                <div class="chart-card">
+                    <h3>Monthly Revenue</h3>
+                    <p>Recorded sales in rupees</p>
+                    <div class="chart-container">
+                        <canvas id="salesChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="year-summary-card">
+                    <div class="summary-card-header">
+                        <div>
+                            <h3>Year Summary</h3>
+                            <p>{{ selected_year }} performance</p>
+                        </div>
+                        <span class="summary-year">{{ selected_year }}</span>
+                    </div>
+
+                    <div class="year-stat">
+                        <span>Total Revenue</span>
+                        <strong>₹{{ report.total_revenue|floatformat:2 }}</strong>
+                    </div>
+                    <div class="year-stat">
+                        <span>Estimated Cost</span>
+                        <strong class="cost-text">₹{{ report.total_cost|floatformat:2 }}</strong>
+                    </div>
+                    <div class="year-stat">
+                        <span>Estimated Profit</span>
+                        <strong class="profit-text">₹{{ report.total_profit|floatformat:2 }}</strong>
+                    </div>
+                    <div class="year-stat">
+                        <span>Profit Margin</span>
+                        <strong>{{ report.profit_margin|floatformat:1 }}%</strong>
+                    </div>
+                    <div class="year-stat">
+                        <span>Transactions</span>
+                        <strong>{{ report.transaction_count }}</strong>
+                    </div>
+
+                    <div class="performance-box">
+                        <span>Overall Performance</span>
+                        <strong>{{ report.performance }}</strong>
+                    </div>
+                    <div class="comparison">
+                        <span>Revenue growth vs {{ compare_year }}</span>
+                        <strong class="{% if growth >= 0 %}positive-text{% else %}negative-text{% endif %}">
+                            {{ growth|floatformat:1 }}%
+                        </strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <h2>Month-by-Month Report</h2>
+                    <p>Detailed sales and estimated profit for {{ selected_year }}.</p>
+                </div>
+                <button class="view-all-btn" onclick="window.print()">Print report</button>
+            </div>
+
+            <div class="table-card">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Sales</th>
+                                <th>Cost</th>
+                                <th>Profit / Loss</th>
+                                <th>Margin</th>
+                                <th>Transactions</th>
+                                <th>Performance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in report.monthly_rows %}
+                            <tr>
+                                <td><strong>{{ row.month }}</strong></td>
+                                <td>₹{{ row.sales|floatformat:2 }}</td>
+                                <td>₹{{ row.cost|floatformat:2 }}</td>
+                                <td class="{% if row.profit < 0 %}loss{% else %}profit{% endif %}">
+                                    ₹{{ row.profit|floatformat:2 }}
+                                </td>
+                                <td>{{ row.margin|floatformat:1 }}%</td>
+                                <td>{{ row.transactions }}</td>
+                                <td>
+                                    {% if row.sales == 0 %}
+                                        <span class="performance neutral">No sales</span>
+                                    {% elif row.profit < 0 %}
+                                        <span class="performance bad">Loss</span>
+                                    {% elif row.margin >= 20 %}
+                                        <span class="performance excellent">Excellent</span>
+                                    {% elif row.margin >= 10 %}
+                                        <span class="performance good">Good</span>
+                                    {% else %}
+                                        <span class="performance average">Average</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>Total</th>
+                                <th>₹{{ report.total_revenue|floatformat:2 }}</th>
+                                <th>₹{{ report.total_cost|floatformat:2 }}</th>
+                                <th>₹{{ report.total_profit|floatformat:2 }}</th>
+                                <th>{{ report.profit_margin|floatformat:1 }}%</th>
+                                <th>{{ report.transaction_count }}</th>
+                                <th>—</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="section two-column-layout">
+            <div class="category-card">
+                <div class="card-section-header">
+                    <div>
+                        <h2>Category Performance</h2>
+                        <p>Revenue contribution by category.</p>
+                    </div>
+                </div>
+
+                {% for category in report.category_data %}
+                <div class="category-item">
+                    <div class="category-row">
+                        <strong>{{ category.name }}</strong>
+                        <span>₹{{ category.revenue|floatformat:2 }}</span>
+                        <b>{{ category.percentage|floatformat:1 }}%</b>
+                    </div>
+                    <div class="category-progress">
+                        <div style="width: {{ category.percentage }}%; background: {{ category.color }};"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="empty-state">No category sales found for this year.</p>
+                {% endfor %}
+            </div>
+
+            <div class="products-card">
+                <div class="card-section-header">
+                    <div>
+                        <h2>Top Selling Products</h2>
+                        <p>Products ranked by recorded revenue.</p>
+                    </div>
+                    <span class="top-badge">TOP 5</span>
+                </div>
+
+                {% for product in report.top_products %}
+                <div class="product-row">
+                    <span class="product-rank">{{ product.rank|stringformat:"02d" }}</span>
+                    <div class="product-details">
+                        <strong>{{ product.name }}</strong>
+                        <small>{{ product.category }} · {{ product.units_sold }} units</small>
+                    </div>
+                    <strong class="product-sales">₹{{ product.revenue|floatformat:2 }}</strong>
+                </div>
+                {% empty %}
+                <p class="empty-state">No product sales found for this year.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="business-insight">
+                <div class="insight-icon">📊</div>
+                <div>
+                    <h2>Business Insight</h2>
+                    {% if report.total_revenue > 0 %}
+                    <p>
+                        In {{ selected_year }}, recorded revenue was
+                        <strong>₹{{ report.total_revenue|floatformat:2 }}</strong>
+                        and estimated profit was
+                        <strong>₹{{ report.total_profit|floatformat:2 }}</strong>.
+                        The estimated profit margin was
+                        <strong>{{ report.profit_margin|floatformat:1 }}%</strong>.
+                        {% if report.best_month and report.best_month.sales > 0 %}
+                        The highest-revenue month was
+                        <strong>{{ report.best_month.month }}</strong>.
+                        {% endif %}
+                    </p>
+                    {% else %}
+                    <p>No sales were recorded for {{ selected_year }}. Complete bills through the Billing page to build this report from actual transactions.</p>
+                    {% endif %}
+                    <small>Product costs are estimated using the current cost price stored for each product.</small>
+                </div>
+            </div>
+        </section>
+
+        <footer class="page-footer">
+            <span>Supermarket AI · Previous Year Sales Report</span>
+            <span>Report year: {{ selected_year }}</span>
+        </footer>
+    </main>
+</div>
+
+{{ chart_labels|json_script:"chart-labels" }}
+{{ chart_current|json_script:"chart-current" }}
+{{ chart_previous|json_script:"chart-previous" }}
+
+<script>
+const labels = JSON.parse(document.getElementById("chart-labels").textContent);
+const currentValues = JSON.parse(document.getElementById("chart-current").textContent);
+const previousValues = JSON.parse(document.getElementById("chart-previous").textContent);
+
+const chartCanvas = document.getElementById("salesChart");
+
+new Chart(chartCanvas, {
+    type: "bar",
+    data: {
+        labels: labels,
+        datasets: [
+            {
+                label: "{{ selected_year|escapejs }}",
+                data: currentValues,
+                backgroundColor: "#6478f5",
+                borderRadius: 5
+            },
+            {
+                label: "{{ compare_year|escapejs }}",
+                data: previousValues,
+                backgroundColor: "#20b486",
+                borderRadius: 5
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ": ₹" +
+                            Number(context.raw).toLocaleString("en-IN", {
+                                maximumFractionDigits: 2
+                            });
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: value => "₹" + Number(value).toLocaleString("en-IN")
+                },
+                grid: { color: "#edf0f7" }
+            },
+            x: { grid: { display: false } }
+        }
+    }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2019 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Products - Supermarket AI</title>
+
+    <link rel="stylesheet"
+          href="{% static 'css/products.css' %}">
+
+</head>
+
+
+<body>
+
+
+<div class="page-layout">
+
+
+    <!-- =========================================
+         SIDEBAR
+    ========================================== -->
+
+    {% include 'sidebar.html' %}
+
+
+
+    <!-- =========================================
+         MAIN CONTENT
+    ========================================== -->
+
+    <main class="main-content">
+
+
+        <!-- =====================================
+             HEADER
+        ====================================== -->
+
+        <header class="top-header">
+
+            <div>
+
+                <h1>
+                    Products
+                </h1>
+
+                <p>
+                    Manage your supermarket products and inventory.
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="add-product-btn"
+                onclick="openAddModal()">
+
+                <span>+</span>
+
+                Add Product
+
+            </button>
+
+        </header>
+
+
+
+        <!-- =====================================
+             SUMMARY CARDS
+        ====================================== -->
+
+        <section class="summary-section">
+
+
+            <!-- TOTAL PRODUCTS -->
+
+            <div class="summary-card">
+
+                <div class="summary-icon blue">
+                    📦
+                </div>
+
+                <div>
+
+                    <p>
+                        Total Products
+                    </p>
+
+                    <h2 id="totalProducts">
+                        {{ total_products }}
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+
+            <!-- IN STOCK -->
+
+            <div class="summary-card">
+
+                <div class="summary-icon green">
+                    ✓
+                </div>
+
+                <div>
+
+                    <p>
+                        In Stock
+                    </p>
+
+                    <h2 id="inStock">
+                        {{ in_stock }}
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+
+            <!-- LOW STOCK -->
+
+            <div class="summary-card">
+
+                <div class="summary-icon orange">
+                    ⚠
+                </div>
+
+                <div>
+
+                    <p>
+                        Low Stock
+                    </p>
+
+                    <h2 id="lowStock">
+                        {{ low_stock }}
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+
+            <!-- OUT OF STOCK -->
+
+            <div class="summary-card">
+
+                <div class="summary-icon red">
+                    !
+                </div>
+
+                <div>
+
+                    <p>
+                        Out of Stock
+                    </p>
+
+                    <h2 id="outOfStock">
+                        {{ out_of_stock }}
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+        </section>
+
+
+
+        <!-- =====================================
+             PRODUCTS SECTION
+        ====================================== -->
+
+        <section class="products-section">
+
+
+            <!-- =================================
+                 TOOLBAR
+            ================================== -->
+
+            <div class="product-toolbar">
+
+
+                <!-- SEARCH -->
+
+                <div class="search-box">
+
+                    <span>
+                        🔍
+                    </span>
+
+                    <input
+                        type="text"
+                        id="searchInput"
+                        placeholder="Search products..."
+                        onkeyup="filterProducts()">
+
+                </div>
+
+
+
+                <!-- CATEGORY FILTER -->
+
+                <select
+                    id="categoryFilter"
+                    onchange="filterProducts()">
+
+                    <option value="all">
+                        All Categories
+                    </option>
+
+
+                    {% for category in categories %}
+
+                        {% if category %}
+
+                            <option value="{{ category|lower }}">
+                                {{ category }}
+                            </option>
+
+                        {% endif %}
+
+                    {% endfor %}
+
+
+                </select>
+
+
+            </div>
+
+
+
+            <!-- =================================
+                 PRODUCT TABLE
+            ================================== -->
+
+            <div class="product-table-container">
+
+                <table class="product-table">
+
+
+                    <thead>
+
+                    <tr>
+
+                        <th>
+                            Product
+                        </th>
+
+                        <th>
+                            Category
+                        </th>
+
+                        <th>
+                            Selling Price
+                        </th>
+
+                        <th>
+                            Cost Price
+                        </th>
+
+                        <th>
+                            Stock
+                        </th>
+
+                        <th>
+                            Status
+                        </th>
+
+                        <th>
+                            Supplier
+                        </th>
+
+                        <th>
+                            Actions
+                        </th>
+
+                    </tr>
+
+                    </thead>
+
+
+
+                    <tbody id="productTableBody">
+
+
+                    {% for product in products %}
+
+
+                    <tr
+                        class="product-row"
+                        data-name="{{ product.name|lower }}"
+                        data-category="{{ product.category|default:''|lower }}"
+                        data-id="{{ product.id }}">
+
+
+                        <!-- PRODUCT -->
+
+                        <td>
+
+                            <div class="product-info">
+
+
+                                <div class="product-image">
+                                    📦
+                                </div>
+
+
+                                <div>
+
+                                    <strong>
+                                        {{ product.name }}
+                                    </strong>
+
+                                    <span>
+                                        SKU: {{ product.sku }}
+                                    </span>
+
+                                </div>
+
+
+                            </div>
+
+                        </td>
+
+
+
+                        <!-- CATEGORY -->
+
+                        <td>
+
+                            <span class="category">
+
+                                {{ product.category|default:"-" }}
+
+                            </span>
+
+                        </td>
+
+
+
+                        <!-- SELLING PRICE -->
+
+                        <td>
+
+                            ₹{{ product.price }}
+
+                        </td>
+
+
+
+                        <!-- COST PRICE -->
+
+                        <td>
+
+                            ₹{{ product.cost_price }}
+
+                        </td>
+
+
+
+                        <!-- STOCK -->
+
+                        <td>
+
+                            {{ product.stock }}
+
+                        </td>
+
+
+
+                        <!-- STATUS -->
+
+                        <td>
+
+
+                            {% if product.stock == 0 %}
+
+                                <span class="status out-stock">
+                                    Out of Stock
+                                </span>
+
+
+                            {% elif product.stock <= product.min_stock %}
+
+                                <span class="status low-stock">
+                                    Low Stock
+                                </span>
+
+
+                            {% else %}
+
+                                <span class="status in-stock">
+                                    In Stock
+                                </span>
+
+                            {% endif %}
+
+
+                        </td>
+
+
+
+                        <!-- SUPPLIER -->
+
+                        <td>
+
+                            {{ product.supplier|default:"-" }}
+
+                        </td>
+
+
+
+                        <!-- ACTIONS -->
+
+                        <td>
+
+                            <div class="action-buttons">
+
+
+                                <!-- EDIT -->
+
+                                <button
+                                    type="button"
+                                    class="edit-btn"
+                                    onclick="openEditModal(
+                                        '{{ product.id }}',
+                                        '{{ product.name|escapejs }}',
+                                        '{{ product.sku|escapejs }}',
+                                        '{{ product.category|default:''|escapejs }}',
+                                        '{{ product.price }}',
+                                        '{{ product.cost_price }}',
+                                        '{{ product.stock }}',
+                                        '{{ product.min_stock }}',
+                                        '{{ product.supplier|default:''|escapejs }}'
+                                    )">
+
+                                    ✏ Edit
+
+                                </button>
+
+
+
+                                <!-- DELETE -->
+
+                                <button
+                                    type="button"
+                                    class="delete-btn"
+                                    onclick="openDeleteModal(
+                                        '{{ product.id }}',
+                                        '{{ product.name|escapejs }}'
+                                    )">
+
+                                    🗑 Delete
+
+                                </button>
+
+
+                            </div>
+
+                        </td>
+
+
+                    </tr>
+
+
+                    {% empty %}
+
+
+                    <tr id="emptyRow">
+
+                        <td
+                            colspan="8"
+                            style="
+                                text-align: center;
+                                padding: 40px;
+                                color: #64748b;
+                            ">
+
+                            No products available.
+
+                        </td>
+
+                    </tr>
+
+
+                    {% endfor %}
+
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+
+            <!-- =================================
+                 PAGINATION
+            ================================== -->
+
+            
+<div class="pagination">
+
+    <div class="pagination-info">
+        Showing
+        <strong>
+            {% if page_obj.paginator.count %}
+                {{ page_obj.start_index }}–{{ page_obj.end_index }}
+            {% else %}
+                0
+            {% endif %}
+        </strong>
+        of <strong>{{ page_obj.paginator.count }}</strong> products
+    </div>
+
+    <div class="page-buttons">
+
+        {% if page_obj.has_previous %}
+            <a class="page-link"
+               href="?page={{ page_obj.previous_page_number }}&search={{ search_query|urlencode }}&category={{ selected_category|urlencode }}">
+                &laquo; Previous
+            </a>
+        {% else %}
+            <span class="page-link disabled">&laquo; Previous</span>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+
+            {% if page_obj.number == num %}
+                <span class="page-active">{{ num }}</span>
+            {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                <a class="page-link"
+                   href="?page={{ num }}&search={{ search_query|urlencode }}&category={{ selected_category|urlencode }}">
+                    {{ num }}
+                </a>
+            {% endif %}
+
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+            <a class="page-link"
+               href="?page={{ page_obj.next_page_number }}&search={{ search_query|urlencode }}&category={{ selected_category|urlencode }}">
+                Next &raquo;
+            </a>
+        {% else %}
+            <span class="page-link disabled">Next &raquo;</span>
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+
+        </section>
+
+
+    </main>
+
+
+</div>
+
+
+
+<!-- =====================================================
+     ADD PRODUCT MODAL
+====================================================== -->
+
+<div
+    class="modal-overlay"
+    id="addProductModal">
+
+
+    <div class="product-modal">
+
+
+        <!-- HEADER -->
+
+        <div class="modal-header">
+
+            <div>
+
+                <h2>
+                    Add Product
+                </h2>
+
+                <p>
+                    Add a new product to your inventory.
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="close-modal"
+                onclick="closeAddModal()">
+
+                ×
+
+            </button>
+
+        </div>
+
+
+
+        <!-- FORM -->
+
+        <form
+            id="addProductForm"
+            onsubmit="addProduct(event)">
+
+
+            {% csrf_token %}
+
+
+            <div class="modal-body">
+
+
+                <!-- ROW 1 -->
+
+                <div class="form-row">
+
+
+                    <!-- PRODUCT NAME -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Product Name *
+                        </label>
+
+                        <input
+                            type="text"
+                            name="name"
+                            id="addName"
+                            placeholder="Enter product name"
+                            required>
+
+                    </div>
+
+
+
+                    <!-- SKU -->
+
+                    <div class="form-group">
+
+                        <label>
+                            SKU *
+                        </label>
+
+                        <input
+                            type="text"
+                            name="sku"
+                            id="addSku"
+                            placeholder="Enter SKU"
+                            required>
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 2 -->
+
+                <div class="form-row">
+
+
+                    <!-- CATEGORY -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Category *
+                        </label>
+
+
+                        <select
+                            name="category"
+                            id="addCategory"
+                            required>
+
+
+                            <option value="">
+                                Select Category
+                            </option>
+
+
+                            {% for category in categories %}
+
+                                {% if category %}
+
+                                    <option value="{{ category }}">
+                                        {{ category }}
+                                    </option>
+
+                                {% endif %}
+
+                            {% endfor %}
+
+
+                        </select>
+
+                    </div>
+
+
+
+                    <!-- SUPPLIER -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Supplier
+                        </label>
+
+                        <input
+                            type="text"
+                            name="supplier"
+                            id="addSupplier"
+                            placeholder="Supplier name">
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 3 -->
+
+                <div class="form-row">
+
+
+                    <!-- SELLING PRICE -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Selling Price *
+                        </label>
+
+
+                        <div class="price-input">
+
+                            <span>
+                                ₹
+                            </span>
+
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                name="price"
+                                id="addPrice"
+                                placeholder="0.00"
+                                required>
+
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- COST PRICE -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Cost Price
+                        </label>
+
+
+                        <div class="price-input">
+
+                            <span>
+                                ₹
+                            </span>
+
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                name="cost_price"
+                                id="addCostPrice"
+                                placeholder="0.00">
+
+
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 4 -->
+
+                <div class="form-row">
+
+
+                    <!-- STOCK -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Stock Quantity
+                        </label>
+
+                        <input
+                            type="number"
+                            min="0"
+                            name="stock"
+                            id="addStock"
+                            value="0">
+
+                    </div>
+
+
+
+                    <!-- MINIMUM STOCK -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Minimum Stock
+                        </label>
+
+                        <input
+                            type="number"
+                            min="0"
+                            name="min_stock"
+                            id="addMinStock"
+                            value="10">
+
+                    </div>
+
+
+                </div>
+
+
+            </div>
+
+
+
+            <!-- FOOTER -->
+
+            <div class="modal-footer">
+
+
+                <button
+                    type="button"
+                    class="cancel-btn"
+                    onclick="closeAddModal()">
+
+                    Cancel
+
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="save-btn">
+
+                    Add Product
+
+                </button>
+
+
+            </div>
+
+
+        </form>
+
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     EDIT PRODUCT MODAL
+====================================================== -->
+
+<div
+    class="modal-overlay"
+    id="editProductModal">
+
+
+    <div class="product-modal">
+
+
+        <!-- HEADER -->
+
+        <div class="modal-header">
+
+            <div>
+
+                <h2>
+                    Edit Product
+                </h2>
+
+                <p>
+                    Update product information.
+                </p>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="close-modal"
+                onclick="closeEditModal()">
+
+                ×
+
+            </button>
+
+        </div>
+
+
+
+        <!-- FORM -->
+
+        <form
+            id="editProductForm"
+            onsubmit="editProduct(event)">
+
+
+            {% csrf_token %}
+
+
+            <input
+                type="hidden"
+                id="editProductId">
+
+
+
+            <div class="modal-body">
+
+
+                <!-- ROW 1 -->
+
+                <div class="form-row">
+
+
+                    <!-- NAME -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Product Name *
+                        </label>
+
+                        <input
+                            type="text"
+                            id="editName"
+                            required>
+
+                    </div>
+
+
+
+                    <!-- SKU -->
+
+                    <div class="form-group">
+
+                        <label>
+                            SKU *
+                        </label>
+
+                        <input
+                            type="text"
+                            id="editSku"
+                            required>
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 2 -->
+
+                <div class="form-row">
+
+
+                    <!-- CATEGORY -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Category *
+                        </label>
+
+
+                        <select
+                            id="editCategory"
+                            required>
+
+
+                            <option value="">
+                                Select Category
+                            </option>
+
+
+                            {% for category in categories %}
+
+                                {% if category %}
+
+                                    <option value="{{ category }}">
+                                        {{ category }}
+                                    </option>
+
+                                {% endif %}
+
+                            {% endfor %}
+
+
+                        </select>
+
+
+                    </div>
+
+
+
+                    <!-- SUPPLIER -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Supplier
+                        </label>
+
+                        <input
+                            type="text"
+                            id="editSupplier">
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 3 -->
+
+                <div class="form-row">
+
+
+                    <!-- SELLING PRICE -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Selling Price *
+                        </label>
+
+
+                        <div class="price-input">
+
+                            <span>
+                                ₹
+                            </span>
+
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                id="editPrice"
+                                required>
+
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- COST PRICE -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Cost Price
+                        </label>
+
+
+                        <div class="price-input">
+
+                            <span>
+                                ₹
+                            </span>
+
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                id="editCostPrice">
+
+
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- ROW 4 -->
+
+                <div class="form-row">
+
+
+                    <!-- STOCK -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Stock Quantity
+                        </label>
+
+                        <input
+                            type="number"
+                            min="0"
+                            id="editStock">
+
+                    </div>
+
+
+
+                    <!-- MINIMUM STOCK -->
+
+                    <div class="form-group">
+
+                        <label>
+                            Minimum Stock
+                        </label>
+
+                        <input
+                            type="number"
+                            min="0"
+                            id="editMinStock">
+
+                    </div>
+
+
+                </div>
+
+
+            </div>
+
+
+
+            <!-- FOOTER -->
+
+            <div class="modal-footer">
+
+
+                <button
+                    type="button"
+                    class="cancel-btn"
+                    onclick="closeEditModal()">
+
+                    Cancel
+
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="save-btn">
+
+                    Save Changes
+
+                </button>
+
+
+            </div>
+
+
+        </form>
+
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     DELETE PRODUCT MODAL
+====================================================== -->
+
+<div
+    class="modal-overlay"
+    id="deleteProductModal">
+
+
+    <div class="delete-modal">
+
+
+        <div class="delete-icon">
+            🗑
+        </div>
+
+
+        <h2>
+            Delete Product?
+        </h2>
+
+
+        <p>
+
+            Are you sure you want to delete
+
+            <strong id="deleteProductName"></strong>?
+
+            <br>
+
+            This action cannot be undone.
+
+        </p>
+
+
+        <div class="delete-modal-buttons">
+
+
+            <button
+                type="button"
+                class="cancel-btn"
+                onclick="closeDeleteModal()">
+
+                Cancel
+
+            </button>
+
+
+            <button
+                type="button"
+                class="confirm-delete-btn"
+                onclick="deleteProduct()">
+
+                Delete Product
+
+            </button>
+
+
+        </div>
+
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     JAVASCRIPT
+====================================================== -->
+
+<script>
+
+
+/* =========================================
+   CSRF TOKEN
+========================================= */
+
+function getCSRFToken() {
+
+    const csrfInput =
+        document.querySelector(
+            '[name=csrfmiddlewaretoken]'
+        );
+
+
+    if (csrfInput) {
+
+        return csrfInput.value;
+
+    }
+
+
+    return '';
+
+}
+
+
+
+/* =========================================
+   ADD MODAL
+========================================= */
+
+function openAddModal() {
+
+
+    const modal =
+        document.getElementById(
+            'addProductModal'
+        );
+
+
+    document
+        .getElementById('addProductForm')
+        .reset();
+
+
+    document
+        .getElementById('addStock')
+        .value = 0;
+
+
+    document
+        .getElementById('addMinStock')
+        .value = 10;
+
+
+    modal.classList.add('show');
+
+}
+
+
+
+function closeAddModal() {
+
+    document
+        .getElementById('addProductModal')
+        .classList.remove('show');
+
+}
+
+
+
+/* =========================================
+   ADD PRODUCT
+========================================= */
+
+function addProduct(event) {
+
+
+    event.preventDefault();
+
+
+    const form =
+        document.getElementById(
+            'addProductForm'
+        );
+
+
+    const formData =
+        new FormData(form);
+
+
+    fetch(
+        "{% url 'add_product' %}",
+        {
+
+            method: 'POST',
+
+            headers: {
+
+                'X-CSRFToken':
+                    getCSRFToken()
+
+            },
+
+            body: formData
+
+        }
+    )
+
+
+    .then(response => response.json())
+
+
+    .then(data => {
+
+
+        if (data.success) {
+
+
+            alert(data.message);
+
+
+            closeAddModal();
+
+
+            location.reload();
+
+
+        } else {
+
+
+            alert(
+                data.message ||
+                'Unable to add product.'
+            );
+
+
+        }
+
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(error);
+
+
+        alert(
+            'Something went wrong while adding the product.'
+        );
+
+
+    });
+
+
+}
+
+
+
+/* =========================================
+   EDIT MODAL
+========================================= */
+
+function openEditModal(
+
+    id,
+    name,
+    sku,
+    category,
+    price,
+    costPrice,
+    stock,
+    minStock,
+    supplier
+
+) {
+
+
+    document.getElementById(
+        'editProductId'
+    ).value = id;
+
+
+    document.getElementById(
+        'editName'
+    ).value = name;
+
+
+    document.getElementById(
+        'editSku'
+    ).value = sku;
+
+
+    document.getElementById(
+        'editCategory'
+    ).value = category;
+
+
+    document.getElementById(
+        'editPrice'
+    ).value = price;
+
+
+    document.getElementById(
+        'editCostPrice'
+    ).value = costPrice;
+
+
+    document.getElementById(
+        'editStock'
+    ).value = stock;
+
+
+    document.getElementById(
+        'editMinStock'
+    ).value = minStock;
+
+
+    document.getElementById(
+        'editSupplier'
+    ).value = supplier;
+
+
+    document.getElementById(
+        'editProductModal'
+    ).classList.add('show');
+
+}
+
+
+
+function closeEditModal() {
+
+    document
+        .getElementById('editProductModal')
+        .classList.remove('show');
+
+}
+
+
+
+/* =========================================
+   EDIT PRODUCT
+========================================= */
+
+function editProduct(event) {
+
+
+    event.preventDefault();
+
+
+    const productId =
+        document.getElementById(
+            'editProductId'
+        ).value;
+
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        'name',
+        document.getElementById(
+            'editName'
+        ).value
+    );
+
+
+    formData.append(
+        'sku',
+        document.getElementById(
+            'editSku'
+        ).value
+    );
+
+
+    formData.append(
+        'category',
+        document.getElementById(
+            'editCategory'
+        ).value
+    );
+
+
+    formData.append(
+        'price',
+        document.getElementById(
+            'editPrice'
+        ).value
+    );
+
+
+    formData.append(
+        'cost_price',
+        document.getElementById(
+            'editCostPrice'
+        ).value
+    );
+
+
+    formData.append(
+        'stock',
+        document.getElementById(
+            'editStock'
+        ).value
+    );
+
+
+    formData.append(
+        'min_stock',
+        document.getElementById(
+            'editMinStock'
+        ).value
+    );
+
+
+    formData.append(
+        'supplier',
+        document.getElementById(
+            'editSupplier'
+        ).value
+    );
+
+
+
+    /*
+        urls.py:
+
+        products/<int:product_id>/edit/
+
+        Correct URL:
+
+        /products/${productId}/edit/
+    */
+
+
+    fetch(
+        `/products/${productId}/edit/`,
+        {
+
+            method: 'POST',
+
+            headers: {
+
+                'X-CSRFToken':
+                    getCSRFToken()
+
+            },
+
+            body: formData
+
+        }
+    )
+
+
+    .then(response => response.json())
+
+
+    .then(data => {
+
+
+        if (data.success) {
+
+
+            alert(data.message);
+
+
+            closeEditModal();
+
+
+            location.reload();
+
+
+        } else {
+
+
+            alert(
+                data.message ||
+                'Unable to update product.'
+            );
+
+
+        }
+
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(error);
+
+
+        alert(
+            'Something went wrong while updating the product.'
+        );
+
+
+    });
+
+
+}
+
+
+
+/* =========================================
+   DELETE MODAL
+========================================= */
+
+let selectedDeleteId = null;
+
+
+
+function openDeleteModal(
+    id,
+    name
+) {
+
+
+    selectedDeleteId = id;
+
+
+    document.getElementById(
+        'deleteProductName'
+    ).textContent = name;
+
+
+    document.getElementById(
+        'deleteProductModal'
+    ).classList.add('show');
+
+}
+
+
+
+function closeDeleteModal() {
+
+
+    selectedDeleteId = null;
+
+
+    document.getElementById(
+        'deleteProductModal'
+    ).classList.remove('show');
+
+}
+
+
+
+/* =========================================
+   DELETE PRODUCT
+========================================= */
+
+function deleteProduct() {
+
+
+    if (!selectedDeleteId) {
+
+        return;
+
+    }
+
+
+
+    /*
+        urls.py:
+
+        products/<int:product_id>/delete/
+
+        Correct URL:
+
+        /products/${selectedDeleteId}/delete/
+    */
+
+
+    fetch(
+        `/products/${selectedDeleteId}/delete/`,
+        {
+
+            method: 'POST',
+
+            headers: {
+
+                'X-CSRFToken':
+                    getCSRFToken()
+
+            }
+
+        }
+    )
+
+
+    .then(response => response.json())
+
+
+    .then(data => {
+
+
+        if (data.success) {
+
+
+            alert(data.message);
+
+
+            closeDeleteModal();
+
+
+            location.reload();
+
+
+        } else {
+
+
+            alert(
+                data.message ||
+                'Unable to delete product.'
+            );
+
+
+        }
+
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(error);
+
+
+        alert(
+            'Something went wrong while deleting the product.'
+        );
+
+
+    });
+
+
+}
+
+
+
+/* =========================================
+   SEARCH + CATEGORY FILTER
+========================================= */
+
+function filterProducts() {
+
+
+    const searchValue =
+        document
+            .getElementById('searchInput')
+            .value
+            .toLowerCase()
+            .trim();
+
+
+    const categoryValue =
+        document
+            .getElementById('categoryFilter')
+            .value
+            .toLowerCase();
+
+
+    const rows =
+        document.querySelectorAll(
+            '.product-row'
+        );
+
+
+    let visibleCount = 0;
+
+
+    rows.forEach(row => {
+
+
+        const productName =
+            row.dataset.name || '';
+
+
+        const category =
+            row.dataset.category || '';
+
+
+        const matchesSearch =
+            productName.includes(
+                searchValue
+            );
+
+
+        const matchesCategory =
+            categoryValue === 'all' ||
+            category === categoryValue;
+
+
+        if (
+            matchesSearch &&
+            matchesCategory
+        ) {
+
+
+            row.style.display = '';
+
+            visibleCount++;
+
+
+        } else {
+
+
+            row.style.display = 'none';
+
+
+        }
+
+
+    });
+
+
+    document.getElementById(
+        'visibleCount'
+    ).textContent = visibleCount;
+
+}
+
+
+
+/* =========================================
+   CLOSE ADD MODAL OUTSIDE CLICK
+========================================= */
+
+document
+    .getElementById('addProductModal')
+    .addEventListener(
+        'click',
+        function(event) {
+
+
+            if (event.target === this) {
+
+                closeAddModal();
+
+            }
+
+
+        }
+    );
+
+
+
+/* =========================================
+   CLOSE EDIT MODAL OUTSIDE CLICK
+========================================= */
+
+document
+    .getElementById('editProductModal')
+    .addEventListener(
+        'click',
+        function(event) {
+
+
+            if (event.target === this) {
+
+                closeEditModal();
+
+            }
+
+
+        }
+    );
+
+
+
+/* =========================================
+   CLOSE DELETE MODAL OUTSIDE CLICK
+========================================= */
+
+document
+    .getElementById('deleteProductModal')
+    .addEventListener(
+        'click',
+        function(event) {
+
+
+            if (event.target === this) {
+
+                closeDeleteModal();
+
+            }
+
+
+        }
+    );
+
+
+
+/* =========================================
+   ESC KEY CLOSE MODALS
+========================================= */
+
+document.addEventListener(
+    'keydown',
+    function(event) {
+
+
+        if (event.key === 'Escape') {
+
+
+            closeAddModal();
+
+
+            closeEditModal();
+
+
+            closeDeleteModal();
+
+
+        }
+
+
+    }
+);
+
+
+</script>
+
+
+</body>
+
+</html>
