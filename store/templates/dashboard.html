@@ -1,829 +1,412 @@
-```html
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Supermarket AI Dashboard</title>
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
-
-    <style>
-        /* ================= DASHBOARD CHART ================= */
-
-        .chart-area {
-            position: relative;
-            cursor: crosshair;
-        }
-
-        .chart-svg {
-            display: block;
-            width: 100%;
-            height: 100%;
-            overflow: visible;
-        }
-
-        .sales-point {
-            fill: #fff;
-            stroke: #2563eb;
-            stroke-width: 3;
-            vector-effect: non-scaling-stroke;
-            pointer-events: none;
-            transition: r .12s ease;
-        }
-
-        .sales-point.active {
-            fill: #2563eb;
-            stroke: #fff;
-            stroke-width: 3;
-        }
-
-        .chart-tooltip {
-            position: absolute;
-            display: none;
-            z-index: 20;
-            pointer-events: none;
-            padding: 10px 13px;
-            border-radius: 8px;
-            background: #172033;
-            color: #fff;
-            box-shadow: 0 5px 18px #0003;
-            font-size: 12px;
-            line-height: 1.6;
-            white-space: nowrap;
-            transform: translate(-50%, calc(-100% - 14px));
-        }
-
-        .chart-tooltip strong,
-        .chart-tooltip span {
-            display: block;
-        }
-
-        .chart-tooltip strong {
-            color: #dbeafe;
-        }
-
-        .chart-tooltip span {
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        /* ================= CHATBOT ================= */
-
-        .chat-toggle {
-            position: fixed;
-            right: 25px;
-            bottom: 25px;
-            z-index: 999;
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            padding: 15px 21px;
-            border: none;
-            border-radius: 30px;
-            background: #2563eb;
-            color: #fff;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 6px 20px #0003;
-            transition: .2s;
-        }
-
-        .chat-toggle:hover {
-            background: #1d4ed8;
-            transform: translateY(-2px);
-        }
-
-        .chat-box {
-            position: fixed;
-            right: 25px;
-            bottom: 90px;
-            z-index: 1000;
-            width: 380px;
-            max-width: calc(100vw - 30px);
-            height: 540px;
-            max-height: calc(100vh - 115px);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-            border-radius: 17px;
-            background: #fff;
-            box-shadow: 0 12px 40px #0003;
-            font-family: Arial, sans-serif;
-        }
-
-        .chat-box[hidden] {
-            display: none;
-        }
-
-        .chat-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 16px;
-            background: #1e40af;
-            color: white;
-        }
-
-        .chat-header-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .chat-avatar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            flex-shrink: 0;
-            border-radius: 12px;
-            background: #ffffff25;
-            font-size: 23px;
-        }
-
-        .chat-header strong,
-        .chat-header small {
-            display: block;
-        }
-
-        .chat-header strong {
-            font-size: 15px;
-        }
-
-        .chat-header small {
-            margin-top: 5px;
-            color: #dbeafe;
-            font-size: 11px;
-        }
-
-        .chat-close {
-            border: none;
-            background: transparent;
-            color: #fff;
-            font-size: 23px;
-            cursor: pointer;
-        }
-
-        .chat-status {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 9px 15px;
-            background: #f0fdf4;
-            color: #166534;
-            border-bottom: 1px solid #dcfce7;
-            font-size: 11px;
-        }
-
-        .chat-status-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #22c55e;
-        }
-
-        .chat-messages {
-            flex: 1;
-            min-height: 0;
-            padding: 15px;
-            overflow-y: auto;
-            background: #f8fafc;
-        }
-
-        .chat-message {
-            max-width: 88%;
-            margin-bottom: 13px;
-            padding: 11px 13px;
-            border-radius: 13px;
-            font-size: 13px;
-            line-height: 1.65;
-            overflow-wrap: anywhere;
-            white-space: pre-wrap;
-        }
-
-        .chat-message.bot {
-            margin-right: auto;
-            border: 1px solid #e2e8f0;
-            background: #fff;
-            color: #1e293b;
-            border-bottom-left-radius: 4px;
-        }
-
-        .chat-message.user {
-            margin-left: auto;
-            background: #2563eb;
-            color: #fff;
-            border-bottom-right-radius: 4px;
-        }
-
-        .chat-message.error {
-            border-color: #fecaca;
-            background: #fef2f2;
-            color: #991b1b;
-        }
-
-        .chat-quick-title {
-            padding: 10px 12px 5px;
-            color: #64748b;
-            background: #fff;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .5px;
-        }
-
-        .quick-questions {
-            display: flex;
-            gap: 7px;
-            padding: 8px 12px 12px;
-            overflow-x: auto;
-            background: #fff;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .quick-questions button {
-            flex-shrink: 0;
-            padding: 8px 11px;
-            border: 1px solid #bfdbfe;
-            border-radius: 18px;
-            background: #eff6ff;
-            color: #1d4ed8;
-            font-size: 11px;
-            cursor: pointer;
-        }
-
-        .quick-questions button:hover {
-            background: #dbeafe;
-        }
-
-        .chat-input-area {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px;
-            border-top: 1px solid #e2e8f0;
-            background: #fff;
-        }
-
-        .chat-input-area input {
-            flex: 1;
-            min-width: 0;
-            padding: 12px 15px;
-            border: 1px solid #cbd5e1;
-            border-radius: 25px;
-            outline: none;
-            font-size: 12px;
-        }
-
-        .chat-input-area input:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 2px #2563eb15;
-        }
-
-        .chat-send {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 41px;
-            height: 41px;
-            flex-shrink: 0;
-            border: none;
-            border-radius: 50%;
-            background: #2563eb;
-            color: #fff;
-            font-size: 19px;
-            cursor: pointer;
-        }
-
-        .chat-send:disabled {
-            opacity: .55;
-            cursor: wait;
-        }
-
-        .chat-footer-note {
-            padding: 0 10px 9px;
-            background: #fff;
-            color: #94a3b8;
-            text-align: center;
-            font-size: 10px;
-        }
-
-        .chat-message a {
-            color: #2563eb;
-        }
-
-        @media (max-width: 480px) {
-            .chat-toggle {
-                right: 15px;
-                bottom: 15px;
-                padding: 13px 17px;
-            }
-
-            .chat-box {
-                right: 15px;
-                bottom: 75px;
-                width: calc(100vw - 30px);
-                height: min(540px, calc(100vh - 95px));
-            }
-        }
-    </style>
 </head>
-
 <body>
-
 {% include 'sidebar.html' %}
 
 <main class="main">
-
-    <!-- HEADER -->
     <header class="header">
-        <div class="header-left">
+        <div>
             <h1>Dashboard</h1>
-            <p>Supermarket sales and AI prediction overview</p>
+            <p>Supermarket sales and inventory management</p>
         </div>
-
-        <div class="header-right">
-            <div class="date-box">
-                📅 <span id="currentDate">Loading...</span>
-            </div>
-        </div>
+        <div class="date-box">📅 <span id="currentDate">Loading...</span></div>
     </header>
 
-    <!-- WELCOME -->
     <section class="welcome">
         <h2>Welcome back, Admin! 👋</h2>
-        <p>
-            Monitor your supermarket performance and use
-            AI-powered predictions to understand your upcoming sales.
-        </p>
+        <p>Monitor your supermarket sales, stock levels, and purchase deliveries.</p>
     </section>
 
-    <!-- SUMMARY CARDS -->
     <section class="summary-grid">
-
         <div class="summary-card">
-            <div class="card-top">
-                <div class="card-icon icon-blue">📦</div>
-                <span class="card-label">Products</span>
-            </div>
+            <div class="card-top"><div class="card-icon icon-blue">📦</div><span class="card-label">Products</span></div>
             <div class="card-value" id="totalProducts">0</div>
-            <div class="card-change change-neutral" id="productChange">
-                Total products
-            </div>
+            <div class="card-change change-neutral">Total products</div>
         </div>
-
         <div class="summary-card">
-            <div class="card-top">
-                <div class="card-icon icon-green">🏷️</div>
-                <span class="card-label">Categories</span>
-            </div>
+            <div class="card-top"><div class="card-icon icon-green">🏷️</div><span class="card-label">Categories</span></div>
             <div class="card-value" id="totalCategories">0</div>
             <div class="card-change change-neutral">Product categories</div>
         </div>
-
         <div class="summary-card">
-            <div class="card-top">
-                <div class="card-icon icon-orange">💰</div>
-                <span class="card-label">Total Sales</span>
-            </div>
+            <div class="card-top"><div class="card-icon icon-orange">💰</div><span class="card-label">Total Sales</span></div>
             <div class="card-value" id="totalSales">₹0</div>
-            <div class="card-change change-neutral" id="salesChange">
-                0.00% from last month
-            </div>
+            <div class="card-change change-neutral" id="salesChange">0.00% from last month</div>
         </div>
-
         <div class="summary-card">
-            <div class="card-top">
-                <div class="card-icon icon-red">⚠️</div>
-                <span class="card-label">Low Stock</span>
-            </div>
+            <div class="card-top"><div class="card-icon icon-red">⚠️</div><span class="card-label">Low Stock</span></div>
             <div class="card-value" id="lowStock">0</div>
-            <div class="card-change change-neutral" id="stockMessage">
-                No products need attention
-            </div>
+            <div class="card-change change-neutral" id="stockMessage">Checking stock levels...</div>
         </div>
-
     </section>
 
-    <!-- MONTHLY SALES AND AI PREDICTION -->
+    <!-- Equal-height, equal-width panels -->
     <section class="content-grid">
-
-        <!-- SALES CHART -->
-        <div class="panel">
+        <div class="panel sales-panel">
             <div class="panel-header">
-                <h3>Monthly Sales</h3>
-                <span>Last 6 months</span>
+                <div><h3>Monthly Sales</h3><span class="panel-subtitle">Last 6 months</span></div>
             </div>
-
             <div class="panel-body">
                 <div class="chart-container">
-
                     <div class="chart-y-axis">
-                        <span id="axisTop">₹0</span>
-                        <span id="axis75">₹0</span>
-                        <span id="axis50">₹0</span>
-                        <span id="axis25">₹0</span>
-                        <span>₹0</span>
+                        <span id="axisTop">₹0</span><span id="axis75">₹0</span>
+                        <span id="axis50">₹0</span><span id="axis25">₹0</span><span>₹0</span>
                     </div>
-
                     <div class="chart-area" id="chartArea">
-                        <svg
-                            id="salesChart"
-                            class="chart-svg"
-                            viewBox="0 0 600 205"
-                            preserveAspectRatio="none"
-                            role="img"
-                            aria-label="Monthly sales chart"
-                        >
-                            <polyline
-                                id="salesLine"
-                                points=""
-                                fill="none"
-                                stroke="#2563eb"
-                                stroke-width="3"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            />
-
-                            <polyline
-                                id="salesHitLine"
-                                points=""
-                                fill="none"
-                                stroke="transparent"
-                                stroke-width="22"
-                                pointer-events="stroke"
-                            />
-
+                        <svg id="salesChart" class="chart-svg" viewBox="0 0 600 205"
+                             preserveAspectRatio="none" role="img" aria-label="Monthly sales chart">
+                            <polyline id="salesLine" points="" fill="none" stroke="#2563eb"
+                                      stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                             <g id="salesPoints"></g>
                         </svg>
-
-                        <div
-                            id="chartTooltip"
-                            class="chart-tooltip"
-                            role="status"
-                            aria-live="polite"
-                        >
-                            <strong id="tooltipMonth">Month</strong>
-                            <span id="tooltipSales">Sales: ₹0</span>
+                        <div id="chartTooltip" class="chart-tooltip">
+                            <strong id="tooltipMonth">Month</strong><span id="tooltipSales">Sales: ₹0</span>
                         </div>
                     </div>
-
                     <div class="chart-labels" id="chartLabels">
-                        <span>---</span><span>---</span><span>---</span>
-                        <span>---</span><span>---</span><span>---</span>
+                        <span>---</span><span>---</span><span>---</span><span>---</span><span>---</span><span>---</span>
                     </div>
-
                 </div>
             </div>
         </div>
 
-        <!-- AI SALES PREDICTION -->
-        <div class="panel ai-card">
-            <div class="panel-header ai-header">
-                <h3>🤖 AI Sales Prediction</h3>
-                <span class="ai-badge">✨ AI Powered</span>
+        <div class="panel restock-card">
+            <div class="panel-header restock-header">
+                <div><h3>📦 Low Stock &amp; Restock</h3><span class="panel-subtitle">Orders and delivery tracking</span></div>
+                <button type="button" class="restock-add-btn" id="openRestockModal">+ Add</button>
             </div>
-
-            <div class="panel-body" id="predictionPanel">
-                <div class="prediction-empty">
-                    <div class="prediction-empty-icon">🤖</div>
-                    <h3>No Prediction Available</h3>
-                    <p>Run an AI prediction to forecast next month's sales.</p>
-                    <a href="{% url 'aiprediction' %}" class="predict-button">
-                        Start Prediction →
-                    </a>
-                </div>
+            <div class="restock-summary">
+                <div class="restock-stat"><span>Low Stock</span><strong id="restockLowCount">0</strong></div>
+                <div class="restock-stat"><span>Pending Orders</span><strong id="restockPendingCount">0</strong></div>
+                <div class="restock-stat"><span>Received</span><strong id="restockReceivedCount">0</strong></div>
+            </div>
+            <div class="restock-orders" id="restockOrders">
+                <div class="restock-empty"><span>📦</span><p>Loading purchase orders...</p></div>
+            </div>
+            <div class="restock-card-footer">
+                <button type="button" class="restock-view-all" id="toggleAllOrders" hidden>View All Orders ↓</button>
+                <a href="{% url 'products' %}" class="restock-view-all-link">View all products →</a>
             </div>
         </div>
-
     </section>
 
-    <!-- PRODUCT OVERVIEW -->
     <section class="panel products-panel">
-
         <div class="panel-header">
-            <h3>Product Overview</h3>
-            <a href="{% url 'products' %}">View all products →</a>
+            <div><h3>Product Overview</h3><span class="panel-subtitle">Current inventory and product status</span></div>
+            <a href="{% url 'products' %}" class="view-link">View all products →</a>
         </div>
-
         <div class="table-wrapper">
             <table class="product-table">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Category</th>
-                        <th>Price</th>
-                        <th>Monthly Sales</th>
-                        <th>Stock</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-
-                <tbody id="productTableBody">
-                    <tr>
-                        <td colspan="6" class="empty-table">
-                            <div class="empty-icon">📦</div>
-                            <p>Loading products...</p>
-                            <span>Please wait.</span>
-                        </td>
-                    </tr>
-                </tbody>
+                <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Monthly Sales</th><th>Stock</th><th>Status</th></tr></thead>
+                <tbody id="productTableBody"><tr><td colspan="6" class="empty-table">Loading products...</td></tr></tbody>
             </table>
         </div>
     </section>
 
-    <!-- AI BANNER -->
     <section class="ai-banner">
-        <div class="ai-banner-left">
-            <div class="ai-banner-icon">🤖</div>
-            <div>
-                <h3>Ready to predict next month's sales?</h3>
-                <p>
-                    Use your supermarket historical sales data
-                    to generate a business forecast.
-                </p>
-            </div>
-        </div>
-
-        <a href="{% url 'aiprediction' %}" class="ai-banner-button">
-            Start Prediction →
-        </a>
+        <div class="ai-banner-icon">📦</div>
+        <div class="ai-banner-copy"><h3>Keep your inventory ready</h3><p>Order low-stock products, track delivery, and add received stock safely.</p></div>
+        <button type="button" class="ai-banner-button" id="openRestockBanner">Manage Stock →</button>
     </section>
-
-    <!-- FOOTER -->
-    <footer class="footer">
-        © 2026 Supermarket AI Prediction System. All rights reserved.
-    </footer>
-
+    <footer class="footer">© 2026 Supermarket AI. All rights reserved.</footer>
 </main>
 
-<!-- ========================================= -->
-<!-- FLOATING AI CHATBOT -->
-<!-- ========================================= -->
-
-<button
-    id="chatToggle"
-    class="chat-toggle"
-    type="button"
-    aria-controls="chatBox"
-    aria-expanded="false"
->
-    🤖 Ask Supermarket AI
-</button>
-
-<div id="chatBox" class="chat-box" role="dialog"
-     aria-label="Supermarket AI chatbot" hidden>
-
-    <div class="chat-header">
-        <div class="chat-header-info">
-            <div class="chat-avatar">🤖</div>
-            <div>
-                <strong>Supermarket AI</strong>
-                <small>Your business data assistant</small>
+<!-- Create purchase order modal -->
+<div class="restock-modal" id="restockModal" hidden>
+    <div class="restock-modal-backdrop" id="closeRestockBackdrop"></div>
+    <section class="restock-modal-content" role="dialog" aria-modal="true" aria-labelledby="restockModalTitle">
+        <header class="restock-modal-header">
+            <div><h2 id="restockModalTitle">Order Low Stock Products</h2><p>Select products and specify how many units to order.</p></div>
+            <button type="button" id="closeRestockModal" class="restock-modal-close" aria-label="Close">×</button>
+        </header>
+        <form id="restockOrderForm">
+            {% csrf_token %}
+            <div class="restock-modal-body">
+                <div class="restock-loading" id="restockLoading">Loading low-stock products...</div>
+                <div id="restockProductList"></div>
+                <div class="restock-no-products" id="restockNoProducts" hidden><span>✅</span><h3>No low-stock products</h3><p>All products are currently above their minimum stock levels.</p></div>
+                <div class="restock-form-group"><label for="restockSupplier">Supplier name</label><input id="restockSupplier" name="supplier" type="text" maxlength="150" placeholder="Enter supplier name" required></div>
+                <div class="restock-form-group"><label for="restockExpectedDate">Expected delivery date</label><input id="restockExpectedDate" name="expected_delivery" type="date" required></div>
+                <p class="restock-form-error" id="restockError" role="alert"></p>
             </div>
-        </div>
-        <button
-            id="chatClose"
-            class="chat-close"
-            type="button"
-            aria-label="Close chatbot"
-        >×</button>
-    </div>
+            <footer class="restock-modal-footer">
+                <button type="button" class="restock-cancel-btn" id="cancelRestockOrder">Cancel</button>
+                <button type="submit" class="restock-submit-btn" id="submitRestockOrder">Order Selected</button>
+            </footer>
+        </form>
+    </section>
+</div>
 
-    <div class="chat-status">
-        <span class="chat-status-dot"></span>
-        Ask about your supermarket data
-    </div>
+<!-- Add received stock quantity modal -->
+<div class="restock-modal" id="addStockModal" hidden>
+    <div class="restock-modal-backdrop" id="closeAddStockBackdrop"></div>
+    <section class="restock-modal-content add-stock-dialog" role="dialog" aria-modal="true" aria-labelledby="addStockTitle">
+        <header class="restock-modal-header">
+            <div><h2 id="addStockTitle">Add Received Stock</h2><p id="addStockProductInfo">Enter the actual quantity received from the supplier.</p></div>
+            <button type="button" id="closeAddStockModal" class="restock-modal-close" aria-label="Close">×</button>
+        </header>
+        <form id="addStockForm">
+            {% csrf_token %}
+            <div class="restock-modal-body">
+                <div class="restock-form-group"><label for="receivedQuantity">Quantity received</label><input id="receivedQuantity" type="number" min="1" step="1" inputmode="numeric" required placeholder="Enter quantity"></div>
+                <p class="stock-preview" id="stockPreview">Enter the quantity to preview the new stock level.</p>
+                <p class="restock-form-error" id="addStockError" role="alert"></p>
+            </div>
+            <footer class="restock-modal-footer">
+                <button type="button" class="restock-cancel-btn" id="cancelAddStock">Cancel</button>
+                <button type="submit" class="restock-submit-btn" id="confirmAddStock">Add Stock</button>
+            </footer>
+        </form>
+    </section>
+</div>
 
+<!-- Business chatbot -->
+<button id="chatToggle" class="chat-toggle" type="button" aria-controls="chatBox" aria-expanded="false">🤖 Ask Supermarket AI</button>
+<div id="chatBox" class="chat-box" role="dialog" aria-label="Supermarket AI chatbot" hidden>
+    <div class="chat-header">
+        <div class="chat-header-info"><div class="chat-avatar">🤖</div><div><strong>Supermarket AI</strong><small>Your business data assistant</small></div></div>
+        <button id="chatClose" class="chat-close" type="button" aria-label="Close chatbot">×</button>
+    </div>
+    <div class="chat-status"><span class="chat-status-dot"></span>Ask about your supermarket data</div>
     <div id="chatMessages" class="chat-messages" aria-live="polite">
-        <div class="chat-message bot">
-            Hello Admin! 👋
-
-            I can help you understand your supermarket business.
-
-            Try asking about:
-            • Next month's predicted sales
-            • Profit or loss
-            • Products needing restocking
-            • Top-selling products
-            • This month's sales
-        </div>
+        <div class="chat-message bot">Hello Admin! 👋<br><br>I can help you understand your supermarket business.<br><br>Try asking about:<br>• This month's sales<br>• Profit or loss<br>• Products needing restocking<br>• Top-selling products</div>
     </div>
-
     <div class="chat-quick-title">Suggested questions</div>
-
     <div class="quick-questions">
-        <button type="button" data-question="Predict next month's sales">
-            📈 Sales prediction
-        </button>
-
-        <button type="button" data-question="Will I make a profit or loss next month?">
-            💰 Profit or loss
-        </button>
-
-        <button type="button" data-question="Which products need restocking?">
-            📦 Restock
-        </button>
-
-        <button type="button" data-question="Which products have the highest sales?">
-            🏆 Top products
-        </button>
-
-        <button type="button" data-question="What are my sales this month?">
-            📊 Monthly sales
-        </button>
+        <button type="button" data-question="Which products need restocking?">📦 Restock</button>
+        <button type="button" data-question="Which products have the highest sales?">🏆 Top products</button>
+        <button type="button" data-question="What are my sales this month?">📊 Monthly sales</button>
+        <button type="button" data-question="Will I make a profit or loss next month?">💰 Profit or loss</button>
     </div>
-
-    <form id="chatForm" class="chat-input-area">
-        {% csrf_token %}
-        <input
-            id="chatInput"
-            type="text"
-            placeholder="Ask about your supermarket..."
-            maxlength="250"
-            autocomplete="off"
-            aria-label="Your question"
-            required
-        >
-        <button
-            type="submit"
-            id="chatSend"
-            class="chat-send"
-            aria-label="Send message"
-        >➤</button>
+    <form id="chatForm" class="chat-input-area">{% csrf_token %}
+        <input id="chatInput" type="text" placeholder="Ask about your supermarket..." maxlength="250" autocomplete="off" required>
+        <button type="submit" id="chatSend" class="chat-send" aria-label="Send message">➤</button>
     </form>
-
-    <div class="chat-footer-note">
-        Answers are based on available supermarket records.
-    </div>
+    <div class="chat-footer-note">Answers are based on available supermarket records.</div>
 </div>
 
 <script>
-/* =========================================
-   NUMBER AND CURRENCY FORMATTING
-========================================= */
+    
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+/* =========================================================
+   FORMATTING AND CSRF
+========================================================= */
 
 function formatNumber(value) {
     return new Intl.NumberFormat("en-IN").format(Number(value || 0));
 }
 
 function formatCurrency(value) {
-    const amount = Number(value || 0);
-
-    if (amount >= 10000000) {
-        return "₹" + (amount / 10000000).toFixed(2) + "Cr";
-    }
-
-    if (amount >= 100000) {
-        return "₹" + (amount / 100000).toFixed(2) + "L";
-    }
-
-    if (amount >= 1000) {
-        return "₹" + (amount / 1000).toFixed(1) + "K";
-    }
-
-    return "₹" + formatNumber(amount);
-}
-
-function formatExactCurrency(value) {
     return "₹" + new Intl.NumberFormat("en-IN", {
-        minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(Number(value || 0));
 }
 
-/* =========================================
-   DATE
-========================================= */
+function formatCompactCurrency(value) {
+    value = Number(value || 0);
+
+    if (value >= 10000000) return "₹" + (value / 10000000).toFixed(1) + "Cr";
+    if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
+    if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "K";
+
+    return formatCurrency(value);
+}
 
 function updateDate() {
-    document.getElementById("currentDate").textContent =
-        new Date().toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric"
-        });
+    $("currentDate").textContent = new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    });
 }
 
-/* =========================================
-   SUMMARY CARDS
-========================================= */
+function getCookie(name) {
+    const prefix = name + "=";
+    const cookie = document.cookie
+        .split(";")
+        .map(item => item.trim())
+        .find(item => item.startsWith(prefix));
 
-function updateSummary(summary) {
-    document.getElementById("totalProducts").textContent =
-        formatNumber(summary.total_products);
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
+}
 
-    document.getElementById("totalCategories").textContent =
-        formatNumber(summary.total_categories);
+function getCsrfToken() {
+    return getCookie("csrftoken") ||
+        document.querySelector("#restockOrderForm [name=csrfmiddlewaretoken]")?.value ||
+        document.querySelector("#addStockForm [name=csrfmiddlewaretoken]")?.value ||
+        document.querySelector("#chatForm [name=csrfmiddlewaretoken]")?.value ||
+        "";
+}
 
-    document.getElementById("totalSales").textContent =
-        formatCurrency(summary.total_sales);
+/* =========================================================
+   COMMON API REQUEST
+========================================================= */
 
-    document.getElementById("lowStock").textContent =
-        formatNumber(summary.low_stock);
+async function apiRequest(url, options = {}) {
+    const method = (options.method || "GET").toUpperCase();
+
+    const headers = {
+        "Accept": "application/json",
+        ...(options.headers || {})
+    };
+
+    if (options.body && !(options.body instanceof FormData)) {
+        headers["Content-Type"] = "application/json";
+    }
+
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+        headers["X-CSRFToken"] = getCsrfToken();
+    }
+
+    const response = await fetch(url, {
+        credentials: "same-origin",
+        ...options,
+        method,
+        headers
+    });
+
+    if (response.redirected) {
+        window.location.href = response.url;
+        throw new Error("Your session may have expired. Please log in again.");
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let data = {};
+
+    if (contentType.includes("application/json")) {
+        data = await response.json().catch(() => ({}));
+    } else {
+        const text = await response.text().catch(() => "");
+
+        if (!response.ok) {
+            throw new Error(
+                `Server returned HTTP ${response.status}. Check the Django terminal for details.`
+            );
+        }
+
+        throw new Error(
+            "Expected JSON from the API. Check the Django URL and view."
+        );
+    }
+
+    if (!response.ok || data.success === false) {
+        throw new Error(
+            data.error ||
+            data.message ||
+            data.detail ||
+            `Request failed with HTTP ${response.status}.`
+        );
+    }
+
+    return data;
+}
+
+/* =========================================================
+   DASHBOARD SUMMARY
+========================================================= */
+
+function updateSummary(summary = {}) {
+    $("totalProducts").textContent = formatNumber(summary.total_products);
+    $("totalCategories").textContent = formatNumber(summary.total_categories);
+    $("totalSales").textContent = formatCompactCurrency(summary.total_sales);
+    $("lowStock").textContent = formatNumber(summary.low_stock);
 
     const growth = Number(summary.sales_growth || 0);
-    const salesChange = document.getElementById("salesChange");
 
-    if (growth > 0) {
-        salesChange.textContent = "↑ " + growth.toFixed(2) +
-            "% from last month";
-        salesChange.className = "card-change change-up";
-    } else if (growth < 0) {
-        salesChange.textContent = "↓ " + Math.abs(growth).toFixed(2) +
-            "% from last month";
-        salesChange.className = "card-change change-down";
-    } else {
-        salesChange.textContent = "0.00% from last month";
-        salesChange.className = "card-change change-neutral";
-    }
+    $("salesChange").textContent =
+        (growth > 0 ? "↑ " : growth < 0 ? "↓ " : "") +
+        Math.abs(growth).toFixed(2) +
+        "% from last month";
 
-    const lowStock = Number(summary.low_stock || 0);
-    const outOfStock = Number(summary.out_of_stock || 0);
-    const stockMessage = document.getElementById("stockMessage");
+    $("salesChange").className =
+        "card-change " +
+        (growth > 0 ? "change-up" :
+         growth < 0 ? "change-down" : "change-neutral");
 
-    if (lowStock + outOfStock > 0) {
-        stockMessage.textContent = lowStock + " low stock, " +
-            outOfStock + " out of stock";
-        stockMessage.className = "card-change change-down";
-    } else {
-        stockMessage.textContent = "Stock levels look good";
-        stockMessage.className = "card-change change-neutral";
-    }
+    const low = Number(summary.low_stock || 0);
+    const out = Number(summary.out_of_stock || 0);
+
+    $("stockMessage").textContent = out
+        ? `${low} low stock, ${out} out of stock`
+        : low
+            ? `${low} products need restocking`
+            : "Stock levels look good";
+
+    $("stockMessage").className =
+        "card-change " +
+        (low + out > 0 ? "change-down" : "change-neutral");
 }
 
-/* =========================================
-   INTERACTIVE SALES CHART
-========================================= */
+/* =========================================================
+   MONTHLY SALES CHART
+========================================================= */
 
 function updateSalesChart(data) {
-    const svg = document.getElementById("salesChart");
-    const line = document.getElementById("salesLine");
-    const hitLine = document.getElementById("salesHitLine");
-    const pointsGroup = document.getElementById("salesPoints");
-    const labels = document.getElementById("chartLabels");
-    const chartArea = document.getElementById("chartArea");
+    const line = $("salesLine");
+    const group = $("salesPoints");
+    const labels = $("chartLabels");
+    const tooltip = $("chartTooltip");
 
-    const tooltip = document.getElementById("chartTooltip");
-    const tooltipMonth = document.getElementById("tooltipMonth");
-    const tooltipSales = document.getElementById("tooltipSales");
-
+    group.replaceChildren();
+    labels.replaceChildren();
     tooltip.style.display = "none";
-    pointsGroup.innerHTML = "";
 
-    if (!Array.isArray(data) || data.length === 0) {
+    const months = Array.isArray(data) ? data.slice(-6) : [];
+
+    if (!months.length) {
         line.setAttribute("points", "");
-        hitLine.setAttribute("points", "");
 
-        labels.innerHTML =
-            "<span>---</span>".repeat(6);
+        for (let i = 0; i < 6; i++) {
+            const span = document.createElement("span");
+            span.textContent = "---";
+            labels.appendChild(span);
+        }
 
         ["axisTop", "axis75", "axis50", "axis25"].forEach(id => {
-            document.getElementById(id).textContent = "₹0";
+            $(id).textContent = "₹0";
         });
 
         return;
     }
 
-    const chartData = data.slice(-6);
-    const values = chartData.map(item => Number(item.sales || 0));
-    const maxValue = Math.max(...values, 1);
+    const max = Math.max(
+        ...months.map(item => Number(item.sales || 0)),
+        1
+    );
 
-    const width = 600;
-    const height = 205;
+    const W = 600;
+    const H = 205;
     const left = 8;
     const right = 8;
     const top = 15;
     const bottom = 15;
 
-    const usableWidth = width - left - right;
-    const usableHeight = height - top - bottom;
-
-    const graphPoints = chartData.map((item, index) => ({
-        x: chartData.length === 1
-            ? width / 2
-            : left + (index / (chartData.length - 1)) * usableWidth,
-        y: top + usableHeight -
-            (Number(item.sales || 0) / maxValue) * usableHeight,
-        month: item.month,
+    const points = months.map((item, index) => ({
+        x: months.length === 1
+            ? W / 2
+            : left + index / (months.length - 1) * (W - left - right),
+        y: top + (H - top - bottom) *
+            (1 - Number(item.sales || 0) / max),
+        month: item.month || "",
         sales: Number(item.sales || 0)
     }));
 
-    const coordinates = graphPoints
-        .map(point => `${point.x},${point.y}`)
-        .join(" ");
+    line.setAttribute(
+        "points",
+        points.map(point => `${point.x},${point.y}`).join(" ")
+    );
 
-    line.setAttribute("points", coordinates);
-    hitLine.setAttribute("points", coordinates);
-
-    graphPoints.forEach((point, index) => {
+    points.forEach(point => {
         const circle = document.createElementNS(
             "http://www.w3.org/2000/svg",
             "circle"
@@ -833,209 +416,97 @@ function updateSalesChart(data) {
         circle.setAttribute("cy", point.y);
         circle.setAttribute("r", "4");
         circle.setAttribute("class", "sales-point");
-        circle.dataset.index = index;
 
-        pointsGroup.appendChild(circle);
+        group.appendChild(circle);
     });
 
-    labels.innerHTML = "";
-
-    chartData.forEach(item => {
+    months.forEach(item => {
         const span = document.createElement("span");
-        span.textContent = item.month;
+        span.textContent = item.month || "";
         labels.appendChild(span);
     });
 
-    document.getElementById("axisTop").textContent =
-        formatCurrency(maxValue);
+    $("axisTop").textContent = formatCompactCurrency(max);
+    $("axis75").textContent = formatCompactCurrency(max * 0.75);
+    $("axis50").textContent = formatCompactCurrency(max * 0.50);
+    $("axis25").textContent = formatCompactCurrency(max * 0.25);
 
-    document.getElementById("axis75").textContent =
-        formatCurrency(maxValue * .75);
-
-    document.getElementById("axis50").textContent =
-        formatCurrency(maxValue * .50);
-
-    document.getElementById("axis25").textContent =
-        formatCurrency(maxValue * .25);
-
-    function showNearestPoint(event) {
+    function showPoint(event) {
+        const svg = $("salesChart");
         const matrix = svg.getScreenCTM();
+
         if (!matrix) return;
 
         const cursor = svg.createSVGPoint();
         cursor.x = event.clientX;
         cursor.y = event.clientY;
 
-        const localCursor = cursor.matrixTransform(matrix.inverse());
+        const local = cursor.matrixTransform(matrix.inverse());
 
-        let nearestPoint = null;
+        let nearest = null;
         let nearestIndex = -1;
-        let shortestDistance = Infinity;
+        let distance = Infinity;
 
-        graphPoints.forEach((point, index) => {
-            const distance = Math.hypot(
-                localCursor.x - point.x,
-                localCursor.y - point.y
+        points.forEach((point, index) => {
+            const currentDistance = Math.hypot(
+                local.x - point.x,
+                local.y - point.y
             );
 
-            if (distance < shortestDistance) {
-                shortestDistance = distance;
-                nearestPoint = point;
+            if (currentDistance < distance) {
+                distance = currentDistance;
+                nearest = point;
                 nearestIndex = index;
             }
         });
 
-        if (!nearestPoint || shortestDistance > 35) {
+        if (!nearest || distance > 35) {
             tooltip.style.display = "none";
             return;
         }
 
-        pointsGroup.querySelectorAll(".sales-point").forEach(
-            (circle, index) => {
-                const active = index === nearestIndex;
-                circle.classList.toggle("active", active);
-                circle.setAttribute("r", active ? "7" : "4");
-            }
-        );
+        [...group.children].forEach((circle, index) => {
+            circle.setAttribute("r", index === nearestIndex ? "7" : "4");
+            circle.classList.toggle("active", index === nearestIndex);
+        });
 
-        tooltipMonth.textContent = nearestPoint.month;
-        tooltipSales.textContent =
-            "Sales: " + formatExactCurrency(nearestPoint.sales);
+        $("tooltipMonth").textContent = nearest.month || "Month";
+        $("tooltipSales").textContent = "Sales: " + formatCurrency(nearest.sales);
 
-        const areaRect = chartArea.getBoundingClientRect();
-        const svgRect = svg.getBoundingClientRect();
+        const area = $("chartArea").getBoundingClientRect();
+        const chart = svg.getBoundingClientRect();
 
-        let x = svgRect.left +
-            (nearestPoint.x / width) * svgRect.width - areaRect.left;
+        tooltip.style.left = Math.max(
+            90,
+            Math.min(
+                chart.left + nearest.x / W * chart.width - area.left,
+                area.width - 90
+            )
+        ) + "px";
 
-        let y = svgRect.top +
-            (nearestPoint.y / height) * svgRect.height - areaRect.top;
-
-        x = Math.max(90, Math.min(x, areaRect.width - 90));
-
-        tooltip.style.left = x + "px";
-        tooltip.style.top = y + "px";
-        tooltip.style.transform = y < 65
-            ? "translate(-50%, 14px)"
-            : "translate(-50%, calc(-100% - 14px))";
+        tooltip.style.top =
+            chart.top + nearest.y / H * chart.height - area.top + "px";
 
         tooltip.style.display = "block";
     }
 
-    if (svg._salesMouseMove) {
-        svg.removeEventListener("mousemove", svg._salesMouseMove);
-        svg.removeEventListener("mouseleave", svg._salesMouseLeave);
-    }
+    $("salesChart").onmousemove = showPoint;
 
-    svg._salesMouseMove = showNearestPoint;
-
-    svg._salesMouseLeave = function () {
+    $("salesChart").onmouseleave = () => {
         tooltip.style.display = "none";
 
-        pointsGroup.querySelectorAll(".sales-point").forEach(circle => {
-            circle.classList.remove("active");
+        [...group.children].forEach(circle => {
             circle.setAttribute("r", "4");
+            circle.classList.remove("active");
         });
     };
-
-    svg.addEventListener("mousemove", svg._salesMouseMove);
-    svg.addEventListener("mouseleave", svg._salesMouseLeave);
-
-    svg.onclick = showNearestPoint;
 }
 
-/* =========================================
-   AI PREDICTION PANEL
-========================================= */
+/* =========================================================
+   PRODUCT OVERVIEW
+========================================================= */
 
-function updatePrediction(prediction) {
-    const panel = document.getElementById("predictionPanel");
-
-    if (!prediction) {
-        panel.innerHTML = `
-            <div class="prediction-empty">
-                <div class="prediction-empty-icon">🤖</div>
-                <h3>No Prediction Available</h3>
-                <p>Run an AI prediction to forecast next month's sales.</p>
-                <a href="{% url 'aiprediction' %}" class="predict-button">
-                    Start Prediction →
-                </a>
-            </div>`;
-        return;
-    }
-
-    const predictedSales = Number(prediction.predicted_sales || 0);
-    const growth = Number(
-        prediction.growth ?? prediction.predicted_growth ?? 0
-    );
-    const previousSales = Number(prediction.previous_sales || 0);
-    const month = prediction.month ||
-        prediction.forecast_month || "Next month";
-    const confidence = prediction.confidence;
-    const risk = prediction.risk_level || "Not calculated";
-
-    panel.innerHTML = "";
-
-    const content = document.createElement("div");
-    content.className = "prediction-main";
-
-    const label = document.createElement("div");
-    label.className = "prediction-label";
-    label.textContent = "Predicted Sales - Next Month";
-
-    const value = document.createElement("div");
-    value.className = "prediction-value";
-    value.textContent = formatCurrency(predictedSales);
-
-    const sub = document.createElement("div");
-    sub.className = "prediction-sub";
-    sub.textContent =
-        (growth >= 0 ? "↑ " : "↓ ") +
-        Math.abs(growth).toFixed(2) + "% expected growth";
-
-    content.append(label, value, sub);
-    panel.appendChild(content);
-
-    const details = document.createElement("div");
-    details.className = "prediction-details";
-
-    const rows = [
-        ["Previous Sales", formatCurrency(previousSales)],
-        ["Predicted Growth", growth.toFixed(2) + "%"],
-        ["Prediction Confidence",
-            confidence == null ? "N/A" : Number(confidence).toFixed(0) + "%"],
-        ["Forecast Period", month],
-        ["Risk Level", risk]
-    ];
-
-    rows.forEach(([heading, result]) => {
-        const row = document.createElement("div");
-        row.className = "detail-row";
-
-        const first = document.createElement("span");
-        first.textContent = heading;
-
-        const second = document.createElement("span");
-        second.textContent = result;
-
-        row.append(first, second);
-        details.appendChild(row);
-    });
-
-    panel.appendChild(details);
-
-    const link = document.createElement("a");
-    link.href = "{% url 'aiprediction' %}";
-    link.className = "predict-button";
-    link.textContent = "🔮 View AI Prediction";
-    panel.appendChild(link);
-}
-
-/* =========================================
-   PRODUCT ICONS AND STATUS
-========================================= */
-
-function getProductIcon(category) {
+function productIcon(category) {
     const icons = {
         "Vegetables": "🥦",
         "Dairy": "🥛",
@@ -1050,42 +521,33 @@ function getProductIcon(category) {
     return icons[category] || "📦";
 }
 
-function getStatusClass(status) {
-    if (status === "In Stock") return "status-good";
-    if (status === "Low Stock") return "status-low";
-    return "status-medium";
-}
-
-/* =========================================
-   PRODUCT TABLE
-========================================= */
-
 function updateProducts(products) {
-    const tbody = document.getElementById("productTableBody");
-    tbody.innerHTML = "";
+    const tbody = $("productTableBody");
+    tbody.replaceChildren();
 
     if (!Array.isArray(products) || products.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="6" class="empty-table">
-                    <div class="empty-icon">📦</div>
-                    <p>No products available</p>
-                    <span>Add products to see them here.</span>
-                </td>
-            </tr>`;
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+
+        cell.colSpan = 6;
+        cell.className = "empty-table";
+        cell.textContent = "No products available.";
+
+        row.appendChild(cell);
+        tbody.appendChild(row);
         return;
     }
 
     products.forEach(product => {
-        const tr = document.createElement("tr");
-
+        const row = document.createElement("tr");
         const productCell = document.createElement("td");
-        const productName = document.createElement("div");
-        productName.className = "product-name";
+        const wrapper = document.createElement("div");
+
+        wrapper.className = "product-name";
 
         const icon = document.createElement("div");
         icon.className = "product-image";
-        icon.textContent = getProductIcon(product.category);
+        icon.textContent = productIcon(product.category);
 
         const info = document.createElement("div");
         info.className = "product-info";
@@ -1097,117 +559,584 @@ function updateProducts(products) {
         sku.textContent = product.sku || "";
 
         info.append(name, sku);
-        productName.append(icon, info);
-        productCell.appendChild(productName);
+        wrapper.append(icon, info);
+        productCell.appendChild(wrapper);
+        row.appendChild(productCell);
 
-        const categoryCell = document.createElement("td");
-        categoryCell.textContent = product.category || "Uncategorized";
-
-        const priceCell = document.createElement("td");
-        priceCell.textContent = formatExactCurrency(product.price);
-
-        const salesCell = document.createElement("td");
-        salesCell.textContent = formatCurrency(product.sales);
-
-        const stockCell = document.createElement("td");
-        stockCell.textContent = formatNumber(product.stock);
+        [
+            product.category || "Uncategorized",
+            formatCurrency(product.price),
+            formatCompactCurrency(product.sales),
+            formatNumber(product.stock)
+        ].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
 
         const statusCell = document.createElement("td");
-        const status = document.createElement("span");
-        status.className = "status " +
-            getStatusClass(product.stock_status);
-        status.textContent = product.stock_status || "Unknown";
+        const badge = document.createElement("span");
 
-        statusCell.appendChild(status);
+        badge.className = "status " +
+            (product.stock_status === "In Stock"
+                ? "status-good"
+                : product.stock_status === "Low Stock"
+                    ? "status-low"
+                    : "status-medium");
 
-        tr.append(
-            productCell,
-            categoryCell,
-            priceCell,
-            salesCell,
-            stockCell,
-            statusCell
-        );
+        badge.textContent = product.stock_status || "Unknown";
 
-        tbody.appendChild(tr);
+        statusCell.appendChild(badge);
+        row.appendChild(statusCell);
+        tbody.appendChild(row);
     });
 }
 
-/* =========================================
-   LOAD DASHBOARD DATA
-========================================= */
-
 async function loadDashboard() {
     try {
-        const response = await fetch(
-            "{% url 'dashboard_api' %}",
-            {
-                method: "GET",
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Accept": "application/json"
-                },
-                credentials: "same-origin"
-            }
-        );
-
-        if (response.redirected) {
-            window.location.href = response.url;
-            return;
-        }
-
-        if (!response.ok) {
-            throw new Error("Dashboard API returned " + response.status);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-            throw new Error("Dashboard API reported failure");
-        }
+        const data = await apiRequest("{% url 'dashboard_api' %}");
 
         updateSummary(data.summary || {});
         updateSalesChart(data.monthly_sales || []);
-        updatePrediction(data.prediction || null);
         updateProducts(data.products || []);
-
     } catch (error) {
-        console.error("Dashboard loading error:", error);
+        console.error("Dashboard API error:", error);
 
-        const tbody = document.getElementById("productTableBody");
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="6" class="empty-table">
-                    <div class="empty-icon">⚠️</div>
-                    <p>Unable to load dashboard data</p>
-                    <span>Check your Django server, login session and dashboard API.</span>
-                </td>
-            </tr>`;
+        const tbody = $("productTableBody");
+        tbody.replaceChildren();
+
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+
+        cell.colSpan = 6;
+        cell.className = "empty-table";
+        cell.textContent = "Unable to load dashboard data: " + error.message;
+
+        row.appendChild(cell);
+        tbody.appendChild(row);
     }
 }
 
-/* =========================================
-   CHATBOT CONTROLS
-========================================= */
+/* =========================================================
+   RESTOCK URLS
+   IMPORTANT: These names must match store/urls.py exactly.
+========================================================= */
 
-const chatToggle = document.getElementById("chatToggle");
-const chatBox = document.getElementById("chatBox");
-const chatClose = document.getElementById("chatClose");
-const chatForm = document.getElementById("chatForm");
-const chatInput = document.getElementById("chatInput");
-const chatMessages = document.getElementById("chatMessages");
-const chatSend = document.getElementById("chatSend");
+const restockUrls = {
+    lowStock: "{% url 'restock_low_stock_api' %}",
+    orders: "{% url 'restock_orders_api' %}",
+    create: "{% url 'restock_create_order' %}",
+    statusTemplate: "{% url 'restock_update_status' 0 %}",
+    addStockTemplate: "{% url 'restock_add_stock' 0 %}"
+};
 
-chatToggle.addEventListener("click", () => {
-    chatBox.hidden = !chatBox.hidden;
-    chatToggle.setAttribute("aria-expanded", String(!chatBox.hidden));
+function buildIdUrl(template, id) {
+    return template.replace("/0/", "/" + encodeURIComponent(id) + "/");
+}
 
-    if (!chatBox.hidden) {
-        chatInput.focus();
+function orderStatusUrl(id) {
+    return buildIdUrl(restockUrls.statusTemplate, id);
+}
+
+function addStockUrl(id) {
+    return buildIdUrl(restockUrls.addStockTemplate, id);
+}
+
+const restockModal = $("restockModal");
+const addStockModal = $("addStockModal");
+
+let lowStockProducts = [];
+let purchaseOrders = [];
+let showAllOrders = false;
+let selectedStockOrder = null;
+
+/* =========================================================
+   CREATE PURCHASE ORDER MODAL
+========================================================= */
+
+function openRestockModal() {
+    restockModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    $("restockError").textContent = "";
+    loadLowStockProducts();
+}
+
+function closeRestockModal() {
+    restockModal.hidden = true;
+    document.body.style.overflow = "";
+}
+
+$("openRestockModal").addEventListener("click", openRestockModal);
+$("openRestockBanner").addEventListener("click", openRestockModal);
+
+["closeRestockModal", "cancelRestockOrder", "closeRestockBackdrop"]
+    .forEach(id => $(id).addEventListener("click", closeRestockModal));
+
+async function loadLowStockProducts() {
+    $("restockLoading").hidden = false;
+    $("restockNoProducts").hidden = true;
+    $("restockProductList").replaceChildren();
+    $("restockError").textContent = "";
+
+    try {
+        const data = await apiRequest(restockUrls.lowStock);
+
+        lowStockProducts = data.products || [];
+
+        $("restockLoading").hidden = true;
+        $("restockNoProducts").hidden = lowStockProducts.length !== 0;
+
+        lowStockProducts.forEach(product => {
+            const row = document.createElement("div");
+            row.className = "restock-product-row";
+
+            const label = document.createElement("label");
+            label.className = "restock-product-check";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "restock-product-select";
+            checkbox.value = product.id;
+
+            const details = document.createElement("div");
+            const title = document.createElement("div");
+            const meta = document.createElement("div");
+
+            title.className = "restock-product-title";
+            title.textContent = product.name || "Product";
+
+            meta.className = "restock-product-detail";
+            meta.textContent =
+                `SKU: ${product.sku || "N/A"} · Stock: ${product.stock} · Minimum: ${product.min_stock}`;
+
+            details.append(title, meta);
+            label.append(checkbox, details);
+
+            const quantity = document.createElement("input");
+            quantity.type = "number";
+            quantity.min = "1";
+            quantity.step = "1";
+            quantity.required = true;
+            quantity.value = Math.max(
+                1,
+                Number(product.min_stock) - Number(product.stock)
+            );
+
+            quantity.className = "restock-quantity-input";
+            quantity.dataset.productId = product.id;
+            quantity.setAttribute("aria-label", "Quantity for " + product.name);
+
+            row.append(label, quantity);
+            $("restockProductList").appendChild(row);
+        });
+    } catch (error) {
+        $("restockLoading").hidden = true;
+        $("restockError").textContent = error.message;
+        console.error("Low-stock API error:", error);
+    }
+}
+
+$("restockOrderForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    $("restockError").textContent = "";
+
+    const checked = [
+        ...document.querySelectorAll(".restock-product-select:checked")
+    ];
+
+    if (!checked.length) {
+        $("restockError").textContent = "Please select at least one product.";
+        return;
+    }
+
+    const items = checked.map(checkbox => {
+        const input = [
+            ...document.querySelectorAll(".restock-quantity-input")
+        ].find(item => item.dataset.productId === checkbox.value);
+
+        return {
+            product_id: Number(checkbox.value),
+            quantity: Number(input?.value)
+        };
+    });
+
+    if (items.some(item =>
+        !Number.isSafeInteger(item.quantity) || item.quantity < 1
+    )) {
+        $("restockError").textContent =
+            "Enter a whole-number quantity of at least 1 for every selected product.";
+        return;
+    }
+
+    const supplier = $("restockSupplier").value.trim();
+    const expectedDelivery = $("restockExpectedDate").value;
+
+    if (!supplier || !expectedDelivery) {
+        $("restockError").textContent =
+            "Enter a supplier name and expected delivery date.";
+        return;
+    }
+
+    const button = $("submitRestockOrder");
+    button.disabled = true;
+
+    try {
+        await apiRequest(restockUrls.create, {
+            method: "POST",
+            body: JSON.stringify({
+                supplier: supplier,
+                expected_delivery: expectedDelivery,
+                items: items
+            })
+        });
+
+        closeRestockModal();
+        $("restockOrderForm").reset();
+
+        await Promise.all([
+            refreshRestockOrders(),
+            loadDashboard()
+        ]);
+    } catch (error) {
+        $("restockError").textContent = error.message;
+        console.error("Create purchase order error:", error);
+    } finally {
+        button.disabled = false;
     }
 });
 
-chatClose.addEventListener("click", () => {
+/* =========================================================
+   CHANGE PURCHASE ORDER STATUS
+========================================================= */
+
+function makeActionButton(text, cssClass, callback) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className = "restock-action-btn " + cssClass;
+    button.textContent = text;
+
+    button.addEventListener("click", async () => {
+        button.disabled = true;
+
+        try {
+            await callback();
+        } catch (error) {
+            alert(error.message);
+            console.error("Purchase order action error:", error);
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    return button;
+}
+
+function statusCss(status) {
+    if (status === "Received") return "restock-status-received";
+    if (status === "In Transit") return "restock-status-transit";
+    if (status === "Cancelled") return "restock-status-cancelled";
+    if (status === "Overdue") return "restock-status-overdue";
+
+    return "restock-status-ordered";
+}
+
+async function changeOrderStatus(order, status) {
+    await apiRequest(orderStatusUrl(order.id), {
+        method: "POST",
+        body: JSON.stringify({ status: status })
+    });
+
+    await Promise.all([
+        refreshRestockOrders(),
+        loadDashboard()
+    ]);
+}
+
+/* =========================================================
+   ADD RECEIVED STOCK MODAL
+========================================================= */
+
+function openAddStockModal(order) {
+    selectedStockOrder = order;
+
+    $("addStockError").textContent = "";
+    $("receivedQuantity").value = String(
+        Math.max(1, Number(order.quantity) || 1)
+    );
+
+    $("receivedQuantity").max = String(Number(order.quantity) || 1);
+
+    $("addStockProductInfo").textContent =
+        `${order.product_name} · Ordered quantity: ${formatNumber(order.quantity)} · Enter the actual quantity received.`;
+
+    const product = lowStockProducts.find(
+        item => String(item.id) === String(order.product_id)
+    );
+
+    $("stockPreview").textContent = product
+        ? `Current stock: ${formatNumber(product.stock)} units.`
+        : "Enter the actual quantity received.";
+
+    addStockModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    $("receivedQuantity").focus();
+}
+
+function closeAddStockModal() {
+    addStockModal.hidden = true;
+    selectedStockOrder = null;
+    document.body.style.overflow = "";
+}
+
+[
+    "closeAddStockModal",
+    "cancelAddStock",
+    "closeAddStockBackdrop"
+].forEach(id => $(id).addEventListener("click", closeAddStockModal));
+
+$("receivedQuantity").addEventListener("input", () => {
+    const quantity = Number($("receivedQuantity").value);
+    const order = selectedStockOrder;
+
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+        $("stockPreview").textContent =
+            "Enter a whole-number quantity greater than zero.";
+        return;
+    }
+
+    if (order && quantity > Number(order.quantity)) {
+        $("stockPreview").textContent =
+            `You ordered ${formatNumber(order.quantity)} units. Check the received quantity.`;
+        return;
+    }
+
+    $("stockPreview").textContent =
+        `You are about to add ${formatNumber(quantity)} unit(s) to the existing stock.`;
+});
+
+$("addStockForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    $("addStockError").textContent = "";
+
+    if (!selectedStockOrder) {
+        $("addStockError").textContent =
+            "No purchase order is selected. Close this window and try again.";
+        return;
+    }
+
+    const quantity = Number($("receivedQuantity").value);
+    const order = selectedStockOrder;
+
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+        $("addStockError").textContent =
+            "Enter a whole-number quantity greater than zero.";
+        return;
+    }
+
+    if (quantity > Number(order.quantity)) {
+        $("addStockError").textContent =
+            `Received quantity cannot exceed the ordered quantity of ${order.quantity}.`;
+        return;
+    }
+
+    const button = $("confirmAddStock");
+    button.disabled = true;
+
+    try {
+        /*
+         * IMPORTANT:
+         * Django backend expects received_quantity.
+         * Do not send quantity_received or quantity here.
+         */
+        await apiRequest(addStockUrl(order.id), {
+            method: "POST",
+            body: JSON.stringify({
+                received_quantity: quantity
+            })
+        });
+
+        closeAddStockModal();
+
+        await Promise.all([
+            refreshRestockOrders(),
+            loadDashboard()
+        ]);
+
+    } catch (error) {
+        $("addStockError").textContent = error.message;
+        console.error("Add received stock error:", error);
+    } finally {
+        button.disabled = false;
+    }
+});
+
+/* =========================================================
+   DISPLAY PURCHASE ORDERS
+========================================================= */
+
+function renderRestockOrders() {
+    const container = $("restockOrders");
+    container.replaceChildren();
+
+    $("restockLowCount").textContent = formatNumber(lowStockProducts.length);
+
+    $("restockPendingCount").textContent = formatNumber(
+        purchaseOrders.filter(order =>
+            ["Ordered", "In Transit"].includes(order.status)
+        ).length
+    );
+
+    $("restockReceivedCount").textContent = formatNumber(
+        purchaseOrders.filter(order => order.status === "Received").length
+    );
+
+    $("toggleAllOrders").hidden = purchaseOrders.length <= 2;
+
+    $("toggleAllOrders").textContent = showAllOrders
+        ? "Show Fewer Orders ↑"
+        : `View All Orders (${purchaseOrders.length}) ↓`;
+
+    if (!purchaseOrders.length) {
+        const empty = document.createElement("div");
+        empty.className = "restock-empty";
+
+        const emoji = document.createElement("span");
+        emoji.textContent = "📦";
+
+        const message = document.createElement("p");
+        message.textContent = "No purchase orders yet";
+
+        const help = document.createElement("small");
+        help.textContent = "Click Add to order low-stock products.";
+
+        empty.append(emoji, message, help);
+        container.appendChild(empty);
+        return;
+    }
+
+    const visibleOrders = showAllOrders
+        ? purchaseOrders
+        : purchaseOrders.slice(0, 2);
+
+    visibleOrders.forEach(order => {
+        const card = document.createElement("article");
+        card.className = "restock-order-item";
+
+        const top = document.createElement("div");
+        top.className = "restock-order-top";
+
+        const info = document.createElement("div");
+        const name = document.createElement("div");
+        const meta = document.createElement("div");
+
+        name.className = "restock-order-name";
+        name.textContent = order.product_name || "Product";
+
+        meta.className = "restock-order-meta";
+        meta.textContent =
+            `Order #${order.id} · Qty: ${formatNumber(order.quantity)} · Expected: ${order.expected_delivery || "Not set"}`;
+
+        info.append(name, meta);
+
+        const badge = document.createElement("span");
+        badge.className = "restock-status " + statusCss(order.status);
+        badge.textContent = order.status || "Unknown";
+
+        top.append(info, badge);
+        card.appendChild(top);
+
+        const bottom = document.createElement("div");
+        bottom.className = "restock-order-bottom";
+
+        const supplier = document.createElement("span");
+        supplier.className = "restock-order-meta";
+        supplier.textContent = "Supplier: " + (order.supplier || "N/A");
+
+        bottom.appendChild(supplier);
+
+        const actions = document.createElement("div");
+        actions.className = "restock-order-actions";
+
+        if (order.status === "Ordered") {
+            actions.appendChild(
+                makeActionButton("Mark In Transit", "transit", () =>
+                    changeOrderStatus(order, "In Transit")
+                )
+            );
+
+            actions.appendChild(
+                makeActionButton("Mark Received", "receive", () =>
+                    changeOrderStatus(order, "Received")
+                )
+            );
+
+        } else if (order.status === "In Transit") {
+            actions.appendChild(
+                makeActionButton("Mark Received", "receive", () =>
+                    changeOrderStatus(order, "Received")
+                )
+            );
+
+        } else if (order.status === "Received" && !order.stock_applied) {
+            actions.appendChild(
+                makeActionButton("Add Stock", "add-stock", () =>
+                    openAddStockModal(order)
+                )
+            );
+
+        } else if (order.stock_applied) {
+            const done = document.createElement("span");
+            done.className = "restock-status restock-status-received";
+            done.textContent = "✓ Stock Added";
+            actions.appendChild(done);
+        }
+
+        bottom.appendChild(actions);
+        card.appendChild(bottom);
+        container.appendChild(card);
+    });
+}
+
+$("toggleAllOrders").addEventListener("click", () => {
+    showAllOrders = !showAllOrders;
+    renderRestockOrders();
+});
+
+async function refreshRestockOrders() {
+    const [lowStockData, ordersData] = await Promise.all([
+        apiRequest(restockUrls.lowStock),
+        apiRequest(restockUrls.orders)
+    ]);
+
+    lowStockProducts = lowStockData.products || [];
+    purchaseOrders = ordersData.orders || [];
+
+    renderRestockOrders();
+}
+
+/* =========================================================
+   CHATBOT
+========================================================= */
+
+const chatToggle = $("chatToggle");
+const chatBox = $("chatBox");
+const chatInput = $("chatInput");
+const chatMessages = $("chatMessages");
+const chatSend = $("chatSend");
+
+chatToggle.addEventListener("click", () => {
+    chatBox.hidden = !chatBox.hidden;
+
+    chatToggle.setAttribute(
+        "aria-expanded",
+        String(!chatBox.hidden)
+    );
+
+    if (!chatBox.hidden) chatInput.focus();
+});
+
+$("chatClose").addEventListener("click", () => {
     chatBox.hidden = true;
     chatToggle.setAttribute("aria-expanded", "false");
     chatToggle.focus();
@@ -1222,20 +1151,6 @@ function addChatMessage(message, type) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     return div;
-}
-
-function getCookie(name) {
-    const cookies = document.cookie ? document.cookie.split(";") : [];
-
-    for (const cookie of cookies) {
-        const item = cookie.trim();
-
-        if (item.startsWith(name + "=")) {
-            return decodeURIComponent(item.substring(name.length + 1));
-        }
-    }
-
-    return "";
 }
 
 async function askSupermarketAI(question) {
@@ -1253,44 +1168,26 @@ async function askSupermarketAI(question) {
     );
 
     try {
-        const response = await fetch(
+        const data = await apiRequest(
             "{% url 'dashboard_chat_api' %}",
             {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie("csrftoken"),
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Accept": "application/json"
-                },
-                credentials: "same-origin",
-                body: JSON.stringify({
-                    message: question
-                })
+                body: JSON.stringify({ message: question })
             }
         );
 
-        const data = await response.json();
         waiting.remove();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Unable to answer your question.");
-        }
-
-        addChatMessage(
-            data.answer || "No answer was returned.",
-            "bot"
-        );
+        addChatMessage(data.answer || "No answer was returned.", "bot");
 
     } catch (error) {
         waiting.remove();
 
         addChatMessage(
-            "I couldn't retrieve the answer. Please check the Django chatbot URL and server logs.",
+            "Unable to retrieve the answer: " + error.message,
             "bot error"
         );
 
-        console.error("Chatbot error:", error);
+        console.error("Chatbot API error:", error);
 
     } finally {
         chatSend.disabled = false;
@@ -1298,14 +1195,9 @@ async function askSupermarketAI(question) {
     }
 }
 
-chatForm.addEventListener("submit", event => {
+$("chatForm").addEventListener("submit", event => {
     event.preventDefault();
-
-    const question = chatInput.value.trim();
-
-    if (question) {
-        askSupermarketAI(question);
-    }
+    askSupermarketAI(chatInput.value);
 });
 
 document.querySelectorAll(".quick-questions button").forEach(button => {
@@ -1314,13 +1206,66 @@ document.querySelectorAll(".quick-questions button").forEach(button => {
     });
 });
 
-/* =========================================
-   START DASHBOARD
-========================================= */
+/* =========================================================
+   ESCAPE KEY
+========================================================= */
 
-updateDate();
-loadDashboard();
+document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+
+    if (!addStockModal.hidden) {
+        closeAddStockModal();
+    } else if (!restockModal.hidden) {
+        closeRestockModal();
+    } else if (!chatBox.hidden) {
+        chatBox.hidden = true;
+        chatToggle.setAttribute("aria-expanded", "false");
+    }
+});
+
+/* =========================================================
+   INITIAL PAGE LOAD
+========================================================= */
+
+async function initializeDashboard() {
+    updateDate();
+
+    await Promise.allSettled([
+        loadDashboard(),
+        refreshRestockOrders()
+    ]);
+
+    if (!purchaseOrders.length) {
+        // refreshRestockOrders already renders the empty state when successful.
+        // If the request failed, show a clear error instead.
+        try {
+            await apiRequest(restockUrls.orders);
+        } catch (error) {
+            console.error("Restock API error:", error);
+
+            $("restockOrders").replaceChildren();
+
+            const empty = document.createElement("div");
+            empty.className = "restock-empty";
+
+            const icon = document.createElement("span");
+            icon.textContent = "⚠️";
+
+            const message = document.createElement("p");
+            message.textContent = "Unable to load purchase orders";
+
+            const details = document.createElement("small");
+            details.textContent = error.message;
+
+            empty.append(icon, message, details);
+            $("restockOrders").appendChild(empty);
+        }
+    }
+}
+
+initializeDashboard();
 </script>
 
+</script>
 </body>
 </html>

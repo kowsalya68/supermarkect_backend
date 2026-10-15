@@ -1,211 +1,195 @@
+import calendar
+import csv
 import json
 import uuid
+from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
+
+import re
+
+
+from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
+from django.contrib import messages
+from django.contrib.auth import authenticate, login as auth_login, logout
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import (
-    Sum,
-    F,
     Count,
-    Q,
     DecimalField,
     ExpressionWrapper,
+    F,
+    Q,
+    Sum,
+    Value,
 )
-from django.db.models.functions import Coalesce
-from datetime import timedelta
-from decimal import Decimal, InvalidOperation
-import calendar
+from django.db.models.functions import Coalesce, TruncMonth
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 from django.core.paginator import Paginator
 
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import authenticate, login as auth_login, logout
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.db import models, transaction
-from django.db.models import Sum, F, Count
-from django.db.models.functions import TruncMonth
-from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
-from .models import Product, Sale, PredictionHistory, Bill, BillItem
+from .models import (
+    Bill,
+    BillItem,
+    PredictionHistory,
+    Product,
+    RestockOrder,
+    Sale,
+)
+
+
 # ==========================================================
-# LOGIN
+# SHARED HELPERS
+# ==========================================================
+
+ZERO = Decimal("0.00")
+MONEY_FIELD = DecimalField(max_digits=16, decimal_places=2)
+
+
+def json_error(message, status=400):
+    return JsonResponse({"success": False, "message": message}, status=status)
+
+
+def parse_json_body(request):
+    try:
+        data = json.loads(request.body or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("Invalid JSON request.")
+    if not isinstance(data, dict):
+        raise ValueError("Request body must be a JSON object.")
+    return data
+
+
+def decimal_value(value, field_name="amount"):
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"Invalid {field_name}.")
+    if not result.is_finite():
+        raise ValueError(f"Invalid {field_name}.")
+    return result
+
+
+def admin_required(view_func):
+    """Require an authenticated administrator for management pages/APIs."""
+    return login_required(login_url="login")(view_func)
+
+
+# ==========================================================
+# LOGIN / LOGOUT
 # ==========================================================
 
 def login(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect("dashboard")
 
-    if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '')
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "")
         user = authenticate(request, username=username, password=password)
 
-        if user is not None:
-            if user.is_superuser and user.is_active:
-                auth_login(request, user)
-                return redirect('dashboard')
-            else:
-                messages.error(request, 'Only administrator accounts can login.')
+        if user and user.is_active and user.is_superuser:
+            auth_login(request, user)
+            return redirect("dashboard")
+
+        if user:
+            messages.error(request, "Only administrator accounts can login.")
         else:
-            messages.error(request, 'Invalid username or password.')
+            messages.error(request, "Invalid username or password.")
 
-    return render(request, 'login.html')
+    return render(request, "login.html")
+
+
+def logout_view(request):
+    logout(request)
+    messages.success(request, "You have logged out successfully.")
+    return redirect("login")
 
 
 # ==========================================================
-# DASHBOARD PAGE
+# DASHBOARD
 # ==========================================================
 
-
-# ==========================================================
-# DASHBOARD PAGE
-# ==========================================================
-
-@login_required(login_url="login")
+@admin_required
 def dashboard(request):
     return render(request, "dashboard.html")
 
 
-# ==========================================================
-# DASHBOARD API
-# ==========================================================
-
-@login_required(login_url="login")
+@admin_required
+@require_GET
 def dashboard_api(request):
     today = timezone.localdate()
 
-    # ------------------------------------------------------
-    # 1. PRODUCT SUMMARY
-    # ------------------------------------------------------
-
     total_products = Product.objects.count()
-
-    total_categories = (
-        Product.objects.values("category")
-        .distinct()
-        .count()
-    )
-
+    total_categories = Product.objects.values("category").distinct().count()
     low_stock = Product.objects.filter(
-        stock__gt=0,
-        stock__lte=F("min_stock")
+        stock__gt=0, stock__lte=F("min_stock")
     ).count()
-
     out_of_stock = Product.objects.filter(stock=0).count()
 
-    # ------------------------------------------------------
-    # 2. TOTAL AND MONTHLY SALES
-    # ------------------------------------------------------
+    total_sales = Sale.objects.aggregate(total=Sum("total_amount"))["total"] or ZERO
+    current_month_sales = Sale.objects.filter(
+        sale_date__year=today.year, sale_date__month=today.month
+    ).aggregate(total=Sum("total_amount"))["total"] or ZERO
 
-    total_sales = (
-        Sale.objects.aggregate(total=Sum("total_amount"))["total"]
-        or Decimal("0.00")
-    )
+    first_day = today.replace(day=1)
+    previous_month_end = first_day - timedelta(days=1)
+    previous_month_sales = Sale.objects.filter(
+        sale_date__year=previous_month_end.year,
+        sale_date__month=previous_month_end.month,
+    ).aggregate(total=Sum("total_amount"))["total"] or ZERO
 
-    current_month_sales = (
-        Sale.objects.filter(
-            sale_date__year=today.year,
-            sale_date__month=today.month
-        ).aggregate(total=Sum("total_amount"))["total"]
-        or Decimal("0.00")
-    )
-
-    # Previous calendar month
-    first_day_this_month = today.replace(day=1)
-    last_day_previous_month = first_day_this_month - timedelta(days=1)
-
-    previous_month_sales = (
-        Sale.objects.filter(
-            sale_date__year=last_day_previous_month.year,
-            sale_date__month=last_day_previous_month.month
-        ).aggregate(total=Sum("total_amount"))["total"]
-        or Decimal("0.00")
-    )
-
-    if previous_month_sales > 0:
-        sales_growth = (
-            (float(current_month_sales) - float(previous_month_sales))
-            / float(previous_month_sales)
-        ) * 100
-    elif current_month_sales > 0:
-        sales_growth = 100.0
+    if previous_month_sales:
+        sales_growth = (float(current_month_sales - previous_month_sales)
+                        / float(previous_month_sales)) * 100
     else:
-        sales_growth = 0.0
-
-    # ------------------------------------------------------
-    # 3. LAST SIX CALENDAR MONTHS
-    # Include months with zero sales.
-    # ------------------------------------------------------
+        sales_growth = 100.0 if current_month_sales else 0.0
 
     monthly_sales_data = []
-
     for offset in range(5, -1, -1):
-        # Convert the current month to a month index, then
-        # move backwards by the requested number of months.
         month_index = today.year * 12 + today.month - 1 - offset
-        year = month_index // 12
-        month = month_index % 12 + 1
-
-        month_total = (
-            Sale.objects.filter(
-                sale_date__year=year,
-                sale_date__month=month
-            ).aggregate(total=Sum("total_amount"))["total"]
-            or Decimal("0.00")
-        )
-
+        year, month = month_index // 12, month_index % 12 + 1
+        total = Sale.objects.filter(
+            sale_date__year=year, sale_date__month=month
+        ).aggregate(total=Sum("total_amount"))["total"] or ZERO
         monthly_sales_data.append({
-            "month": calendar.month_abbr[month] + " " + str(year),
-            "sales": float(month_total),
+            "month": f"{calendar.month_abbr[month]} {year}",
+            "sales": float(total),
         })
 
-    # ------------------------------------------------------
-    # 4. TOP FIVE PRODUCTS
-    # ------------------------------------------------------
+    top_products = Product.objects.annotate(
+        total_sales=Sum("sales__total_amount"),
+        monthly_product_sales=Sum(
+            "sales__total_amount",
+            filter=Q(
+                sales__sale_date__year=today.year,
+                sales__sale_date__month=today.month,
+            ),
+        ),
+    ).order_by("-total_sales", "name")[:5]
 
-    products = (
-        Product.objects.annotate(
-            total_sales=Sum("sales__total_amount"),
-            monthly_product_sales=Sum(
-                "sales__total_amount",
-                filter=Q(
-                    sales__sale_date__year=today.year,
-                    sales__sale_date__month=today.month
-                )
-            )
-        )
-        .order_by("-total_sales", "name")[:5]
-    )
+    product_data = [{
+        "id": p.id,
+        "name": p.name,
+        "sku": p.sku,
+        "category": p.category,
+        "price": float(p.price or 0),
+        "cost_price": float(p.cost_price or 0),
+        "stock": p.stock,
+        "min_stock": p.min_stock,
+        "stock_status": p.stock_status,
+        "sales": float(p.monthly_product_sales or 0),
+        "profit_per_unit": float(p.profit_per_unit or 0),
+    } for p in top_products]
 
-    product_data = []
-
-    for product in products:
-        product_data.append({
-            "id": product.id,
-            "name": product.name,
-            "sku": product.sku,
-            "category": product.category,
-            "price": float(product.price or 0),
-            "cost_price": float(product.cost_price or 0),
-            "stock": product.stock,
-            "min_stock": product.min_stock,
-            "stock_status": product.stock_status,
-            # The dashboard column is labelled Monthly Sales.
-            "sales": float(product.monthly_product_sales or 0),
-            "profit_per_unit": float(product.profit_per_unit or 0),
-        })
-
-    # ------------------------------------------------------
-    # 5. MOST RECENT AI PREDICTION
-    # ------------------------------------------------------
-
-    prediction = (
-        PredictionHistory.objects
-        .order_by("-created_at")
-        .first()
-    )
-
+    prediction = PredictionHistory.objects.order_by("-created_at").first()
     prediction_data = None
-
     if prediction:
         prediction_data = {
             "month": str(prediction.prediction_month),
@@ -220,13 +204,8 @@ def dashboard_api(request):
             "profit_margin": float(prediction.profit_margin or 0),
         }
 
-    # ------------------------------------------------------
-    # 6. JSON RESPONSE
-    # ------------------------------------------------------
-
     return JsonResponse({
         "success": True,
-
         "summary": {
             "total_products": total_products,
             "total_categories": total_categories,
@@ -237,343 +216,195 @@ def dashboard_api(request):
             "low_stock": low_stock,
             "out_of_stock": out_of_stock,
         },
-
         "monthly_sales": monthly_sales_data,
         "products": product_data,
         "prediction": prediction_data,
     })
 
 
-
 # ==========================================================
-# PRODUCTS PAGE
+# PRODUCT MANAGEMENT
 # ==========================================================
 
-
-@login_required(login_url='login')
+@admin_required
 def products(request):
-
-    # 1. Get all products, newest first
     product_list = Product.objects.all().order_by("-created_at")
-
-    # 2. Search by product name or SKU
     search_query = request.GET.get("search", "").strip()
+    selected_category = request.GET.get("category", "").strip()
 
     if search_query:
         product_list = product_list.filter(
-            Q(name__icontains=search_query) |
-            Q(sku__icontains=search_query)
+            Q(name__icontains=search_query) | Q(sku__icontains=search_query)
         )
 
-    # 3. Filter products by category
-    selected_category = request.GET.get("category", "").strip()
-
-    valid_categories = [
-        choice[0] for choice in Product.CATEGORY_CHOICES
-    ]
-
+    valid_categories = [value for value, label in Product.CATEGORY_CHOICES]
     if selected_category in valid_categories:
-        product_list = product_list.filter(
-            category=selected_category
-        )
+        product_list = product_list.filter(category=selected_category)
     else:
         selected_category = ""
 
-    # 4. Calculate summary counts from ALL products,
-    # not just the current search results or page
     all_products = Product.objects.all()
-
-    total_products = all_products.count()
-
-    in_stock = all_products.filter(
-        stock__gt=models.F("min_stock")
-    ).count()
-
-    low_stock = all_products.filter(
-        stock__gt=0,
-        stock__lte=models.F("min_stock")
-    ).count()
-
-    out_of_stock = all_products.filter(
-        stock__lte=0
-    ).count()
-
-    # 5. Paginate filtered products: maximum 10 per page
     paginator = Paginator(product_list, 10)
+    page_obj = paginator.get_page(request.GET.get("page"))
 
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-
-    # 6. Get categories from Product model choices
-    categories = [
-        choice[0]
-        for choice in Product.CATEGORY_CHOICES
-    ]
-
-    # 7. Send data to the template
-    context = {
+    return render(request, "products.html", {
         "products": page_obj.object_list,
         "page_obj": page_obj,
         "paginator": paginator,
-
-        "categories": categories,
+        "categories": valid_categories,
         "selected_category": selected_category,
         "search_query": search_query,
+        "total_products": all_products.count(),
+        "in_stock": all_products.filter(stock__gt=F("min_stock")).count(),
+        "low_stock": all_products.filter(stock__gt=0, stock__lte=F("min_stock")).count(),
+        "out_of_stock": all_products.filter(stock=0).count(),
+    })
 
-        "total_products": total_products,
-        "in_stock": in_stock,
-        "low_stock": low_stock,
-        "out_of_stock": out_of_stock,
+
+def product_payload(product):
+    return {
+        "id": product.id,
+        "name": product.name,
+        "sku": product.sku,
+        "category": product.category,
+        "price": str(product.price),
+        "cost_price": str(product.cost_price),
+        "stock": product.stock,
+        "min_stock": product.min_stock,
+        "supplier": product.supplier,
+        "status": product.stock_status,
     }
 
-    return render(
-        request,
-        "products.html",
-        context
-    )
 
-# ==========================================================
-# ADD PRODUCT API
-# ==========================================================
-
+@admin_required
 @require_POST
-@login_required(login_url='login')
 def add_product(request):
-
     try:
-        name = request.POST.get("name")
-        sku = request.POST.get("sku")
-        category = request.POST.get("category")
-        price = request.POST.get("price")
-        cost_price = request.POST.get("cost_price", 0)
-        stock = request.POST.get("stock", 0)
-        min_stock = request.POST.get("min_stock", 10)
-        supplier = request.POST.get("supplier", "")
-
-        if not name:
-            return JsonResponse({
-                "success": False,
-                "message": "Product name is required."
-            }, status=400)
-
-        if not sku:
-            return JsonResponse({
-                "success": False,
-                "message": "Product SKU is required."
-            }, status=400)
-
+        name = request.POST.get("name", "").strip()
+        sku = request.POST.get("sku", "").strip()
+        category = request.POST.get("category", "").strip()
+        if not name or not sku:
+            return json_error("Product name and SKU are required.")
         if Product.objects.filter(sku=sku).exists():
-            return JsonResponse({
-                "success": False,
-                "message": "SKU already exists."
-            }, status=400)
+            return json_error("SKU already exists.")
+        if category not in dict(Product.CATEGORY_CHOICES):
+            return json_error("Select a valid category.")
 
         product = Product.objects.create(
             name=name,
             sku=sku,
             category=category,
-            price=price,
-            cost_price=cost_price,
-            stock=stock,
-            min_stock=min_stock,
-            supplier=supplier
+            price=decimal_value(request.POST.get("price"), "price"),
+            cost_price=decimal_value(request.POST.get("cost_price", "0"), "cost price"),
+            stock=int(request.POST.get("stock", 0)),
+            min_stock=int(request.POST.get("min_stock", 10)),
+            supplier=request.POST.get("supplier", "").strip(),
         )
-
         return JsonResponse({
             "success": True,
             "message": "Product added successfully.",
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "sku": product.sku,
-                "category": product.category,
-                "price": str(product.price),
-                "cost_price": str(product.cost_price),
-                "stock": product.stock,
-                "min_stock": product.min_stock,
-                "supplier": product.supplier,
-                "status": product.stock_status
-            }
+            "product": product_payload(product),
         })
-
-    except Exception as e:
-        return JsonResponse({
-            "success": False,
-            "message": str(e)
-        }, status=400)
+    except (ValueError, TypeError, InvalidOperation) as exc:
+        return json_error(str(exc))
+    except Exception:
+        return json_error("Could not add product. Check the entered values.")
 
 
-# ==========================================================
-# EDIT PRODUCT API
-# ==========================================================
-
+@admin_required
 @require_POST
-@login_required(login_url='login')
 def edit_product(request, product_id):
-
+    product = get_object_or_404(Product, pk=product_id)
     try:
-        product = get_object_or_404(Product, id=product_id)
+        name = request.POST.get("name", product.name).strip()
+        sku = request.POST.get("sku", product.sku).strip()
+        category = request.POST.get("category", product.category).strip()
+        if not name or not sku:
+            return json_error("Product name and SKU are required.")
+        if Product.objects.filter(sku=sku).exclude(pk=product.pk).exists():
+            return json_error("SKU already exists.")
+        if category not in dict(Product.CATEGORY_CHOICES):
+            return json_error("Select a valid category.")
 
-        product.name = request.POST.get("name", product.name)
-
-        new_sku = request.POST.get("sku", product.sku)
-
-        if Product.objects.filter(
-            sku=new_sku
-        ).exclude(
-            id=product.id
-        ).exists():
-
-            return JsonResponse({
-                "success": False,
-                "message": "SKU already exists."
-            }, status=400)
-
-        product.sku = new_sku
-
-        product.category = request.POST.get(
-            "category",
-            product.category
+        product.name = name
+        product.sku = sku
+        product.category = category
+        product.price = decimal_value(request.POST.get("price", product.price), "price")
+        product.cost_price = decimal_value(
+            request.POST.get("cost_price", product.cost_price), "cost price"
         )
-
-        product.price = request.POST.get(
-            "price",
-            product.price
-        )
-
-        product.cost_price = request.POST.get(
-            "cost_price",
-            product.cost_price
-        )
-
-        product.stock = request.POST.get(
-            "stock",
-            product.stock
-        )
-
-        product.min_stock = request.POST.get(
-            "min_stock",
-            product.min_stock
-        )
-
-        product.supplier = request.POST.get(
-            "supplier",
-            product.supplier
-        )
-
+        product.stock = int(request.POST.get("stock", product.stock))
+        product.min_stock = int(request.POST.get("min_stock", product.min_stock))
+        product.supplier = request.POST.get("supplier", product.supplier).strip()
+        if product.stock < 0 or product.min_stock < 0:
+            return json_error("Stock values cannot be negative.")
         product.save()
-
         return JsonResponse({
             "success": True,
             "message": "Product updated successfully.",
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "sku": product.sku,
-                "category": product.category,
-                "price": str(product.price),
-                "cost_price": str(product.cost_price),
-                "stock": product.stock,
-                "min_stock": product.min_stock,
-                "supplier": product.supplier,
-                "status": product.stock_status
-            }
+            "product": product_payload(product),
         })
-
-    except Exception as e:
-        return JsonResponse({
-            "success": False,
-            "message": str(e)
-        }, status=400)
+    except (ValueError, TypeError, InvalidOperation) as exc:
+        return json_error(str(exc))
+    except Exception:
+        return json_error("Could not update product. Check the entered values.")
 
 
-# ==========================================================
-# DELETE PRODUCT API
-# ==========================================================
-
+@admin_required
 @require_POST
-@login_required(login_url='login')
 def delete_product(request, product_id):
-
+    product = get_object_or_404(Product, pk=product_id)
     try:
-        product = get_object_or_404(
-            Product,
-            id=product_id
+        name = product.name
+        product.delete()
+        return JsonResponse({"success": True, "message": f"{name} deleted successfully."})
+    except Exception:
+        return json_error(
+            "This product cannot be deleted because it is referenced by existing records."
         )
 
-        product_name = product.name
-
-        product.delete()
-
-        return JsonResponse({
-            "success": True,
-            "message": f"{product_name} deleted successfully."
-        })
-
-    except Exception as e:
-        return JsonResponse({
-            "success": False,
-            "message": str(e)
-        }, status=400)
-
 
 # ==========================================================
-# SALES PAGE
+# SALES MANAGEMENT
 # ==========================================================
 
-# ============================================================
-# SALES PAGE
-# ============================================================
-
-@login_required(login_url="login")
+# ==========================================================
+# SALES MANAGEMENT
+# ==========================================================
+@admin_required
 def sales(request):
-
     today = timezone.localdate()
-    current_year = today.year
 
-    # ---------------------------------------------
-    # 1. GET ALL SALES
-    # ---------------------------------------------
-
-    all_sales = Sale.objects.select_related("product")
-
-    # ---------------------------------------------
-    # 2. SEARCH FILTER
-    # ---------------------------------------------
-
-    search = request.GET.get("search", "").strip()
-
+    # Get all sales
+    all_sales = Sale.objects.select_related("product").all()
     sales_list = all_sales.order_by("-sale_date", "-id")
 
+    # Read filters
+    search = request.GET.get("search", "").strip()
+    date_filter = request.GET.get("date", "all")
+    payment_filter = request.GET.get("payment", "all")
+
+    # Search by product, SKU, customer mobile, or sale ID
     if search:
-        search_filter = (
+        query = (
             Q(product__name__icontains=search)
             | Q(product__sku__icontains=search)
-            | Q(customer_name__icontains=search)
+            | Q(customer_mobile__icontains=search)
         )
 
-        # Sale ID is numeric, so search it using an exact match.
         if search.isdigit():
-            search_filter |= Q(id=int(search))
+            query |= Q(id=int(search))
 
-        sales_list = sales_list.filter(search_filter)
+        sales_list = sales_list.filter(query)
 
-    # ---------------------------------------------
-    # 3. DATE FILTER
-    # ---------------------------------------------
-
-    date_filter = request.GET.get("date", "all")
-
+    # Date filters
     month_start = today.replace(day=1)
 
     if date_filter == "today":
-        sales_list = sales_list.filter(
-            sale_date__date=today
-        )
+        sales_list = sales_list.filter(sale_date__date=today)
 
     elif date_filter == "week":
         week_start = today - timedelta(days=today.weekday())
-
         sales_list = sales_list.filter(
             sale_date__date__gte=week_start,
             sale_date__date__lte=today,
@@ -586,302 +417,316 @@ def sales(request):
         )
 
     elif date_filter == "last_month":
-        previous_month_end = month_start - timedelta(days=1)
-        previous_month_start = previous_month_end.replace(day=1)
+        last_end = month_start - timedelta(days=1)
+        last_start = last_end.replace(day=1)
 
         sales_list = sales_list.filter(
-            sale_date__date__gte=previous_month_start,
-            sale_date__date__lte=previous_month_end,
+            sale_date__date__gte=last_start,
+            sale_date__date__lte=last_end,
         )
 
     else:
         date_filter = "all"
 
-    # ---------------------------------------------
-    # 4. PAYMENT FILTER
-    # ---------------------------------------------
-
-    payment_filter = request.GET.get("payment", "all")
-
-    if payment_filter in ["Cash", "UPI", "Card"]:
+    # Payment filters
+    if payment_filter in ("Cash", "UPI", "Card"):
         sales_list = sales_list.filter(
             payment_method=payment_filter
         )
     else:
         payment_filter = "all"
 
-    # ---------------------------------------------
-    # 5. PAGINATION - 10 RECORDS PER PAGE
-    # ---------------------------------------------
-
+    # Pagination
     paginator = Paginator(sales_list, 10)
+    page_obj = paginator.get_page(request.GET.get("page"))
 
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-
-    # The template loops over `sales`, which is the current page.
-    sales = page_obj
-
-    # ---------------------------------------------
-    # 6. TOTAL SALES SUMMARY
-    # ---------------------------------------------
-
+    # Overall sales statistics
     total_sales = (
-        all_sales.aggregate(total=Sum("total_amount"))["total"] or 0
+        all_sales.aggregate(total=Sum("total_amount"))["total"]
+        or ZERO
     )
 
     transaction_count = all_sales.count()
 
-    average_sale = (
-        float(total_sales) / transaction_count
-        if transaction_count
-        else 0
-    )
-
-    # ---------------------------------------------
-    # 7. TODAY'S SALES
-    # ---------------------------------------------
-
     today_sales = (
         all_sales.filter(
             sale_date__date=today
-        ).aggregate(total=Sum("total_amount"))["total"] or 0
+        ).aggregate(total=Sum("total_amount"))["total"]
+        or ZERO
     )
-
-    # ---------------------------------------------
-    # 8. CURRENT MONTH SALES
-    # ---------------------------------------------
 
     monthly_sales = (
         all_sales.filter(
             sale_date__date__gte=month_start,
             sale_date__date__lte=today,
-        ).aggregate(total=Sum("total_amount"))["total"] or 0
+        ).aggregate(total=Sum("total_amount"))["total"]
+        or ZERO
     )
 
-    # ---------------------------------------------
-    # 9. PREVIOUS MONTH SALES
-    # ---------------------------------------------
-
-    previous_month_end = month_start - timedelta(days=1)
-    previous_month_start = previous_month_end.replace(day=1)
+    # Previous month sales
+    last_end = month_start - timedelta(days=1)
+    last_start = last_end.replace(day=1)
 
     previous_month_sales = (
         all_sales.filter(
-            sale_date__date__gte=previous_month_start,
-            sale_date__date__lte=previous_month_end,
-        ).aggregate(total=Sum("total_amount"))["total"] or 0
+            sale_date__date__gte=last_start,
+            sale_date__date__lte=last_end,
+        ).aggregate(total=Sum("total_amount"))["total"]
+        or ZERO
     )
 
-    # ---------------------------------------------
-    # 10. MONTHLY SALES GROWTH
-    # ---------------------------------------------
-
+    # Monthly growth
     if previous_month_sales:
-        sales_growth = (
-            (
-                float(monthly_sales)
-                - float(previous_month_sales)
-            )
+        growth = (
+            float(monthly_sales - previous_month_sales)
             / float(previous_month_sales)
         ) * 100
     else:
-        sales_growth = 0
+        growth = 100.0 if monthly_sales else 0.0
 
-    sales_growth = round(sales_growth, 2)
-
-    # ---------------------------------------------
-    # 11. MONTHLY SALES CHART - ALL 12 MONTHS
-    # ---------------------------------------------
-
+    # Monthly chart for the current year
     monthly_chart = (
-        all_sales.filter(
-            sale_date__year=current_year
-        )
+        all_sales.filter(sale_date__year=today.year)
         .annotate(month=TruncMonth("sale_date"))
         .values("month")
         .annotate(total=Sum("total_amount"))
         .order_by("month")
     )
 
-    # Map each month number to its actual sales amount.
-    monthly_totals = {
-        item["month"].month: float(item["total"] or 0)
-        for item in monthly_chart
+    totals_by_month = {
+        row["month"].month: float(row["total"] or 0)
+        for row in monthly_chart
     }
 
-    # Always show January through December.
-    chart_labels = [
-        calendar.month_abbr[month]
-        for month in range(1, 13)
-    ]
-
-    # Months without sales show 0 instead of disappearing.
-    chart_values = [
-        monthly_totals.get(month, 0)
-        for month in range(1, 13)
-    ]
-
-    # ---------------------------------------------
-    # 12. TEMPLATE CONTEXT
-    # ---------------------------------------------
-
-    context = {
-        # Sales table and pagination
-        "sales": sales,
-        "page_obj": page_obj,
-
-        # Search and filters
-        "search": search,
-        "date_filter": date_filter,
-        "payment_filter": payment_filter,
-
-        # Summary cards
-        "total_sales": total_sales,
-        "today_sales": today_sales,
-        "monthly_sales": monthly_sales,
-        "previous_month_sales": previous_month_sales,
-        "sales_growth": sales_growth,
-        "transaction_count": transaction_count,
-        "average_sale": average_sale,
-
-        # Chart data
-        "chart_labels": chart_labels,
-        "chart_values": chart_values,
-    }
-
-    return render(request, "sales.html", context)
-
+    # Render template
+    return render(
+        request,
+        "sales.html",
+        {
+            "sales": page_obj,
+            "page_obj": page_obj,
+            "search": search,
+            "date_filter": date_filter,
+            "payment_filter": payment_filter,
+            "total_sales": total_sales,
+            "today_sales": today_sales,
+            "monthly_sales": monthly_sales,
+            "previous_month_sales": previous_month_sales,
+            "sales_growth": round(growth, 2),
+            "transaction_count": transaction_count,
+            "average_sale": (
+                float(total_sales) / transaction_count
+                if transaction_count
+                else 0
+            ),
+            "chart_labels": [
+                calendar.month_abbr[m]
+                for m in range(1, 13)
+            ],
+            "chart_values": [
+                totals_by_month.get(m, 0)
+                for m in range(1, 13)
+            ],
+        },
+    )
 
 
 # ==========================================================
 # BILLING PAGE
 # ==========================================================
 
-
-# ============================================
-# BILLING PAGE
-# ============================================
-
-@login_required(login_url='login')
+@admin_required
 def billing(request):
-    products = Product.objects.filter(stock__gt=0).order_by('name')
+    products = Product.objects.filter(
+        stock__gt=0
+    ).order_by("name")
 
-    return render(request, 'billing.html', {
-        'products': products,
-    })
+    return render(
+        request,
+        "billing.html",
+        {
+            "products": products,
+        },
+    )
 
 
-# ============================================
-# COMPLETE BILL AND SAVE TO DATABASE
-# ============================================
+# ==========================================================
+# COMPLETE BILL
+# ==========================================================
+# ==========================================================
+# COMPLETE BILL
+# ==========================================================
 
-@login_required(login_url='login')
+@admin_required
 @require_POST
 def complete_bill(request):
     try:
-        data = json.loads(request.body)
+        # 1. Parse the JSON request
+        data = parse_json_body(request)
 
-        items = data.get('items', [])
-        customer_name = str(data.get('customer_name', '')).strip()
-        payment_method = data.get('payment_method', 'Cash')
+        # 2. Validate customer mobile number
+        customer_mobile = str(
+            data.get("customer_mobile", "")
+        ).strip()
+
+        if not customer_mobile:
+            return json_error(
+                "Please enter the customer mobile number."
+            )
+
+        if not re.fullmatch(r"[0-9]{10}", customer_mobile):
+            return json_error(
+                "Enter a valid 10-digit mobile number."
+            )
+
+        # 3. Validate bill items
+        items = data.get("items", [])
 
         if not isinstance(items, list) or not items:
-            return JsonResponse({
-                'success': False,
-                'message': 'Please add at least one product.'
-            }, status=400)
+            return json_error(
+                "Please add at least one product."
+            )
 
-        if payment_method not in ['Cash', 'UPI', 'Card']:
-            return JsonResponse({
-                'success': False,
-                'message': 'Invalid payment method.'
-            }, status=400)
+        # 4. Validate payment method
+        payment_method = str(
+            data.get("payment_method", "Cash")
+        ).strip()
 
-        discount = Decimal(str(data.get('discount', '0')))
-        amount_received = Decimal(str(data.get('amount_received', '0')))
+        if payment_method not in ("Cash", "UPI", "Card"):
+            return json_error("Invalid payment method.")
 
-        if not discount.is_finite() or not amount_received.is_finite():
-            raise ValueError('Invalid amount.')
+        # 5. Validate discount and received amount
+        discount = decimal_value(
+            data.get("discount", "0"),
+            "discount"
+        )
+
+        amount_received = decimal_value(
+            data.get("amount_received", "0"),
+            "amount received"
+        )
 
         if discount < 0 or amount_received < 0:
-            return JsonResponse({
-                'success': False,
-                'message': 'Amounts cannot be negative.'
-            }, status=400)
+            return json_error(
+                "Discount and amount received cannot be negative."
+            )
 
-        # Combine duplicate product IDs.
+        # 6. Validate product IDs and quantities
         quantities = {}
 
         for item in items:
-            product_id = int(item['product_id'])
-            quantity = int(item['quantity'])
+            if not isinstance(item, dict):
+                return json_error(
+                    "Invalid product information."
+                )
+
+            try:
+                product_id = int(item["product_id"])
+                quantity = int(item["quantity"])
+            except (KeyError, TypeError, ValueError):
+                return json_error(
+                    "Product ID and quantity are required."
+                )
+
+            # Reject values such as 1.5 or booleans
+            if (
+                isinstance(item["product_id"], bool)
+                or str(item["product_id"]).strip() != str(product_id)
+            ):
+                return json_error("Invalid product ID.")
+
+            if (
+                isinstance(item["quantity"], bool)
+                or str(item["quantity"]).strip() != str(quantity)
+            ):
+                return json_error("Quantity must be a whole number.")
+
+            if product_id <= 0:
+                return json_error("Invalid product ID.")
 
             if quantity <= 0:
-                raise ValueError('Product quantity must be greater than zero.')
+                return json_error(
+                    "Quantity must be greater than zero."
+                )
 
             quantities[product_id] = (
                 quantities.get(product_id, 0) + quantity
             )
 
+        # 7. Process bill atomically
         with transaction.atomic():
-            # Lock products to avoid selling the same stock concurrently.
-            locked_products = Product.objects.select_for_update().filter(
-                id__in=quantities.keys()
-            ).order_by('id')
+
+            # Lock products to prevent simultaneous stock overselling
+            locked_products = (
+                Product.objects.select_for_update()
+                .filter(pk__in=quantities.keys())
+                .order_by("pk")
+            )
 
             product_map = {
-                product.id: product for product in locked_products
+                product.pk: product
+                for product in locked_products
             }
 
             if len(product_map) != len(quantities):
-                return JsonResponse({
-                    'success': False,
-                    'message': 'One or more products no longer exist.'
-                }, status=400)
+                return json_error(
+                    "One or more selected products no longer exist."
+                )
 
-            subtotal = Decimal('0.00')
+            # 8. Calculate subtotal and check stock
+            subtotal = Decimal("0.00")
 
             for product_id, quantity in quantities.items():
                 product = product_map[product_id]
 
                 if product.stock < quantity:
-                    return JsonResponse({
-                        'success': False,
-                        'message': (
-                            f'Insufficient stock for {product.name}. '
-                            f'Available stock: {product.stock}.'
-                        )
-                    }, status=400)
+                    return json_error(
+                        f"Insufficient stock for {product.name}. "
+                        f"Available stock: {product.stock}."
+                    )
 
                 subtotal += product.price * quantity
 
-            subtotal = subtotal.quantize(Decimal('0.01'))
+            subtotal = subtotal.quantize(Decimal("0.01"))
 
+            # 9. Calculate discount, tax, and total
             if discount > subtotal:
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Discount cannot exceed the subtotal.'
-                }, status=400)
+                return json_error(
+                    "Discount cannot exceed the subtotal."
+                )
+
+            discount = discount.quantize(Decimal("0.01"))
 
             taxable_amount = subtotal - discount
-            tax = (taxable_amount * Decimal('0.05')).quantize(
-                Decimal('0.01')
+
+            # Keep this tax rate consistent with your billing UI.
+            tax = (
+                taxable_amount * Decimal("0.05")
+            ).quantize(Decimal("0.01"))
+
+            total = (taxable_amount + tax).quantize(
+                Decimal("0.01")
             )
-            total = taxable_amount + tax
+
+            amount_received = amount_received.quantize(
+                Decimal("0.01")
+            )
 
             if amount_received < total:
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Amount received is less than the total.'
-                }, status=400)
+                return json_error(
+                    f"Amount received must be at least ₹{total}."
+                )
 
-            change_amount = amount_received - total
+            change_amount = (
+                amount_received - total
+            ).quantize(Decimal("0.01"))
 
-            # Save the main bill.
+            # 10. Create the bill
             bill = Bill.objects.create(
-                bill_number=f"BILL-{uuid.uuid4().hex[:12].upper()}",
-                customer_name=customer_name,
+                bill_number=(
+                    f"BILL-{uuid.uuid4().hex[:12].upper()}"
+                ),
+                customer_mobile=customer_mobile,
                 subtotal=subtotal,
                 discount=discount,
                 tax=tax,
@@ -891,675 +736,480 @@ def complete_bill(request):
                 change_amount=change_amount,
             )
 
-            # Save items, reduce stock, and record sales.
+            # 11. Create bill items, sales records, and update stock
             for product_id, quantity in quantities.items():
                 product = product_map[product_id]
-                price = product.price
-                line_total = price * quantity
+
+                line_total = (
+                    product.price * quantity
+                ).quantize(Decimal("0.01"))
 
                 BillItem.objects.create(
                     bill=bill,
                     product=product,
                     quantity=quantity,
-                    price=price,
+                    price=product.price,
                     total=line_total,
                 )
 
+                # Reduce inventory
                 product.stock -= quantity
-                product.save(update_fields=['stock', 'updated_at'])
+                product.save(
+                    update_fields=["stock", "updated_at"]
+                )
 
-                # Keep the Sales Management page connected to billing.
+                # Record the sale
                 Sale.objects.create(
                     product=product,
                     quantity=quantity,
-                    selling_price=price,
+                    selling_price=product.price,
+                    total_amount=line_total,
                     payment_method=payment_method,
-                    customer_name=customer_name,
+                    customer_mobile=customer_mobile,
                 )
 
+        # 12. Return success response to the frontend
         return JsonResponse({
-            'success': True,
-            'message': 'Bill completed successfully.',
-            'bill_number': bill.bill_number,
-            'date': timezone.localtime(bill.created_at).strftime(
-                '%d %b %Y, %I:%M %p'
-            ),
-            'subtotal': str(bill.subtotal),
-            'discount': str(bill.discount),
-            'tax': str(bill.tax),
-            'total': str(bill.total),
-            'payment_method': bill.payment_method,
-            'amount_received': str(bill.amount_received),
-            'change_amount': str(bill.change_amount),
+            "success": True,
+            "message": "Bill completed successfully.",
+            "bill_number": bill.bill_number,
+            "date": timezone.localtime(
+                bill.created_at
+            ).strftime("%d %b %Y, %I:%M %p"),
+            "customer_mobile": customer_mobile,
+            "subtotal": str(bill.subtotal),
+            "discount": str(bill.discount),
+            "tax": str(bill.tax),
+            "total": str(bill.total),
+            "payment_method": bill.payment_method,
+            "amount_received": str(bill.amount_received),
+            "change_amount": str(bill.change_amount),
         })
 
-    except (ValueError, TypeError, KeyError, InvalidOperation, json.JSONDecodeError):
-        return JsonResponse({
-            'success': False,
-            'message': 'Invalid billing information. Please check your entries.'
-        }, status=400)
+    except (ValueError, TypeError, KeyError, InvalidOperation):
+        return json_error(
+            "Invalid billing information. Check your entries."
+        )
 
+    except Exception:
+        # Print the actual error in the Django terminal
+        import logging
+        logging.getLogger(__name__).exception(
+            "Failed to complete supermarket bill"
+        )
 
-
+        return json_error(
+            "Unable to complete the bill. Check the server terminal."
+        )
 # ==========================================================
-# AI PREDICTION PAGE
+# NEXT-MONTH BUSINESS PREDICTION
 # ==========================================================
 
-
-# ==========================================================
-# AI BUSINESS PREDICTION - CORRECTED LOGIC
-# ==========================================================
 
 import calendar
+from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Sum, F, Q, DecimalField, Value
-from django.db.models.functions import Coalesce
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import Product, Sale
 
 
 def get_business_prediction():
-    """
-    Estimate next month's sales, product costs, profit/loss,
-    stock demand, and business risk from recorded sales.
-
-    This is a simple trend-based forecast, not a trained ML model.
-    """
-
     today = timezone.localdate()
-    zero = Decimal("0.00")
 
-    money_field = DecimalField(
-        max_digits=16,
-        decimal_places=2
-    )
+    # -----------------------------------------
+    # 1. Identify the next forecast month
+    # -----------------------------------------
+    if today.month == 12:
+        forecast_year = today.year + 1
+        forecast_month = 1
+    else:
+        forecast_year = today.year
+        forecast_month = today.month + 1
 
-    # ------------------------------------------------------
-    # 1. NEXT MONTH
-    # ------------------------------------------------------
-
-    next_month_index = today.year * 12 + today.month
-
-    next_year = next_month_index // 12
-    next_month = next_month_index % 12 + 1
-
-    next_month_days = calendar.monthrange(
-        next_year, next_month
+    forecast_days = calendar.monthrange(
+        forecast_year, forecast_month
     )[1]
 
-    forecast_month = (
-        f"{calendar.month_name[next_month]} {next_year}"
+    forecast_start = today.replace(
+        day=1
     )
 
-    # ------------------------------------------------------
-    # 2. SELECT RECENT SALES
-    # ------------------------------------------------------
+    if forecast_start.month == 12:
+        forecast_start = forecast_start.replace(
+            year=forecast_start.year + 1, month=1
+        )
+    else:
+        forecast_start = forecast_start.replace(
+            month=forecast_start.month + 1
+        )
 
+    forecast_end = forecast_start.replace(
+        day=forecast_days
+    )
+
+    # -----------------------------------------
+    # 2. Load ALL historical sales
+    #    Do not limit the main dataset to 90 days
+    # -----------------------------------------
+    all_sales = Sale.objects.filter(
+        sale_date__lt=forecast_start
+    ).select_related("product").order_by("sale_date")
+
+    # Monthly revenue and cost
+    monthly_data = defaultdict(
+        lambda: {
+            "revenue": Decimal("0"),
+            "cost": Decimal("0"),
+            "units": 0,
+        }
+    )
+
+    # Recent sales are used only as an additional trend
     recent_start = today - timedelta(days=89)
 
-    recent_queryset = Sale.objects.filter(
-        sale_date__date__gte=recent_start,
-        sale_date__date__lte=today,
-    ).select_related("product")
+    recent_revenue = Decimal("0")
+    recent_cost = Decimal("0")
+    recent_units = defaultdict(int)
 
-    use_recent_period = recent_queryset.exists()
+    for sale in all_sales:
+        sale_day = sale.sale_date.date() if hasattr(
+            sale.sale_date, "date"
+        ) else sale.sale_date
 
-    if use_recent_period:
-        sales_queryset = recent_queryset
+        year_month = (sale_day.year, sale_day.month)
+
+        quantity = sale.quantity or 0
+        revenue = Decimal(str(
+            sale.total_amount
+            if sale.total_amount is not None
+            else (sale.selling_price or 0) * quantity
+        ))
+
+        product_cost = Decimal(str(
+            sale.product.cost_price or 0
+        )) * quantity
+
+        monthly_data[year_month]["revenue"] += revenue
+        monthly_data[year_month]["cost"] += product_cost
+        monthly_data[year_month]["units"] += quantity
+
+        if recent_start <= sale_day <= today:
+            recent_revenue += revenue
+            recent_cost += product_cost
+            recent_units[sale.product_id] += quantity
+
+    # -----------------------------------------
+    # 3. Previous-year seasonal forecast
+    #    Use the same calendar month in every
+    #    available previous year
+    # -----------------------------------------
+    seasonal_revenues = []
+    seasonal_costs = []
+
+    for (year, month), values in monthly_data.items():
+        if month == forecast_month and year < forecast_year:
+            seasonal_revenues.append(values["revenue"])
+            seasonal_costs.append(values["cost"])
+
+    if seasonal_revenues:
+        seasonal_sales = sum(
+            seasonal_revenues, Decimal("0")
+        ) / Decimal(len(seasonal_revenues))
+
+        seasonal_cost = sum(
+            seasonal_costs, Decimal("0")
+        ) / Decimal(len(seasonal_costs))
     else:
-        # Fallback for businesses without sales in the
-        # most recent 90-day period.
-        sales_queryset = Sale.objects.filter(
-            sale_date__date__lte=today
-        ).select_related("product")
+        seasonal_sales = None
+        seasonal_cost = None
 
-    oldest_sale = sales_queryset.order_by(
-        "sale_date"
-    ).first()
+    # -----------------------------------------
+    # 4. Recent daily trend projected into
+    #    the forecast month
+    # -----------------------------------------
+    recent_days = max(
+        1,
+        (today - recent_start).days + 1
+    )
 
-    if oldest_sale:
-        observed_days = max(
-            (today - oldest_sale.sale_date.date()).days + 1,
-            1
+    recent_sales_forecast = (
+        recent_revenue / Decimal(recent_days)
+    ) * Decimal(forecast_days)
+
+    recent_cost_forecast = (
+        recent_cost / Decimal(recent_days)
+    ) * Decimal(forecast_days)
+
+    # -----------------------------------------
+    # 5. Combine historical seasonal data and
+    #    recent trends
+    # -----------------------------------------
+    if seasonal_sales is not None:
+        # 60% previous matching months,
+        # 40% recent sales trend
+        predicted_sales = (
+            seasonal_sales * Decimal("0.60")
+            + recent_sales_forecast * Decimal("0.40")
         )
+
+        predicted_cost = (
+            seasonal_cost * Decimal("0.60")
+            + recent_cost_forecast * Decimal("0.40")
+        )
+
+        forecast_method = (
+            "Previous-year same-month history "
+            "and recent 90-day trend"
+        )
+
+    elif all_sales.exists():
+        # No matching historical month:
+        # use recent trend if available;
+        # otherwise use all-history averages
+        if recent_revenue > 0:
+            predicted_sales = recent_sales_forecast
+            predicted_cost = recent_cost_forecast
+            forecast_method = "Recent sales trend; no matching month history"
+        else:
+            total_revenue = sum(
+                (v["revenue"] for v in monthly_data.values()),
+                Decimal("0")
+            )
+            total_cost = sum(
+                (v["cost"] for v in monthly_data.values()),
+                Decimal("0")
+            )
+
+            first_sale = all_sales.order_by(
+                "sale_date"
+            ).first()
+
+            first_day = first_sale.sale_date.date() if hasattr(
+                first_sale.sale_date, "date"
+            ) else first_sale.sale_date
+
+            history_days = max(
+                1, (today - first_day).days + 1
+            )
+
+            predicted_sales = (
+                total_revenue / Decimal(history_days)
+            ) * Decimal(forecast_days)
+
+            predicted_cost = (
+                total_cost / Decimal(history_days)
+            ) * Decimal(forecast_days)
+
+            forecast_method = "All-history daily average"
+
     else:
-        observed_days = 0
+        predicted_sales = Decimal("0")
+        predicted_cost = Decimal("0")
+        forecast_method = "Insufficient historical sales data"
 
-    # ------------------------------------------------------
-    # 3. HISTORICAL SALES AND COST
-    # ------------------------------------------------------
-
-    cost_expression = F("quantity") * F(
-        "product__cost_price"
-    )
-
-    totals = sales_queryset.aggregate(
-        revenue=Coalesce(
-            Sum("total_amount"),
-            Value(zero),
-            output_field=money_field,
-        ),
-        cost=Coalesce(
-            Sum(cost_expression),
-            Value(zero),
-            output_field=money_field,
-        ),
-    )
-
-    historical_revenue = totals["revenue"] or zero
-    historical_cost = totals["cost"] or zero
-
-    # ------------------------------------------------------
-    # 4. NEXT-MONTH SALES AND COST ESTIMATE
-    # ------------------------------------------------------
-
-    if observed_days > 0:
-        daily_revenue = (
-            historical_revenue / Decimal(observed_days)
-        )
-
-        daily_cost = (
-            historical_cost / Decimal(observed_days)
-        )
-
-        predicted_sales = daily_revenue * Decimal(
-            next_month_days
-        )
-
-        predicted_cost = daily_cost * Decimal(
-            next_month_days
-        )
-    else:
-        predicted_sales = zero
-        predicted_cost = zero
-
-    predicted_sales = predicted_sales.quantize(
-        Decimal("0.01")
-    )
-
-    predicted_cost = predicted_cost.quantize(
-        Decimal("0.01")
-    )
-
-    # Revenue minus estimated product cost.
-    # This is gross profit, not net profit.
-    predicted_profit = (
-        predicted_sales - predicted_cost
-    ).quantize(Decimal("0.01"))
+    # -----------------------------------------
+    # 6. Calculate expected profit or loss
+    # -----------------------------------------
+    predicted_profit = predicted_sales - predicted_cost
 
     if predicted_sales > 0:
         profit_margin = (
             predicted_profit / predicted_sales
         ) * Decimal("100")
     else:
-        profit_margin = zero
+        profit_margin = Decimal("0")
 
-    profit_margin = profit_margin.quantize(
-        Decimal("0.01")
-    )
-
-    # ------------------------------------------------------
-    # 5. RECENT SALES GROWTH
-    # Compare two consecutive 30-day periods.
-    # ------------------------------------------------------
-
-    recent_30_start = today - timedelta(days=29)
-    previous_30_start = today - timedelta(days=59)
-    previous_30_end = today - timedelta(days=30)
-
-    recent_30_sales = Sale.objects.filter(
-        sale_date__date__gte=recent_30_start,
-        sale_date__date__lte=today,
-    ).aggregate(
-        total=Coalesce(
-            Sum("total_amount"),
-            Value(zero),
-            output_field=money_field,
-        )
-    )["total"] or zero
-
-    previous_30_sales = Sale.objects.filter(
-        sale_date__date__gte=previous_30_start,
-        sale_date__date__lte=previous_30_end,
-    ).aggregate(
-        total=Coalesce(
-            Sum("total_amount"),
-            Value(zero),
-            output_field=money_field,
-        )
-    )["total"] or zero
-
-    if previous_30_sales > 0:
-        predicted_growth = (
-            (recent_30_sales - previous_30_sales)
-            / previous_30_sales
-        ) * Decimal("100")
-    elif recent_30_sales > 0:
-        predicted_growth = Decimal("100.00")
-    else:
-        predicted_growth = zero
-
-    predicted_growth = predicted_growth.quantize(
-        Decimal("0.01")
-    )
-
-    # ------------------------------------------------------
-    # 6. RISK LEVEL
-    # ------------------------------------------------------
-
-    if observed_days == 0 or predicted_sales == 0:
-        risk_level = "High"
-    elif predicted_profit < 0:
-        risk_level = "High"
-    elif profit_margin < Decimal("10"):
-        risk_level = "Medium"
-    else:
-        risk_level = "Low"
-
-    # ------------------------------------------------------
-    # 7. CONFIDENCE INDICATOR
-    # A transparent data-coverage heuristic, not ML accuracy.
-    # ------------------------------------------------------
-
-    if observed_days == 0:
-        confidence = Decimal("0.00")
-    else:
-        confidence = min(
-            Decimal(observed_days) / Decimal("90")
-            * Decimal("100"),
-            Decimal("100"),
-        ).quantize(Decimal("0.01"))
-
-    # ------------------------------------------------------
-    # 8. PRODUCT DEMAND AND STOCK RISK
-    # ------------------------------------------------------
-
-    product_sales_filter = Q(
-        sales__sale_date__date__lte=today
-    )
-
-    if use_recent_period:
-        product_sales_filter &= Q(
-            sales__sale_date__date__gte=recent_start
-        )
-
-    products = Product.objects.annotate(
-        units_sold=Coalesce(
-            Sum(
-                "sales__quantity",
-                filter=product_sales_filter,
-            ),
-            Value(0),
-        )
-    ).order_by("name")
+    # -----------------------------------------
+    # 7. Find high-demand products using
+    #    recent sales and check current stock
+    # -----------------------------------------
+    products = Product.objects.all()
 
     high_demand_products = []
     loss_risk_products = []
 
     for product in products:
-        units_sold = product.units_sold or 0
+        units_sold = recent_units.get(product.id, 0)
+        stock = product.stock or 0
+        minimum_stock = product.min_stock or 0
 
-        if observed_days > 0:
-            demand = (
-                Decimal(units_sold)
-                / Decimal(observed_days)
-                * Decimal(next_month_days)
+        if units_sold > 0:
+            daily_demand = Decimal(units_sold) / Decimal(recent_days)
+            estimated_monthly_demand = int(
+                daily_demand * Decimal(forecast_days)
             )
 
-            # Round up so fractional estimated demand
-            # does not underestimate restocking needs.
-            predicted_demand = int(
-                demand.to_integral_value(
-                    rounding="ROUND_CEILING"
-                )
-            )
-        else:
-            predicted_demand = 0
+            if estimated_monthly_demand > 0 and stock < estimated_monthly_demand:
+                high_demand_products.append({
+                    "id": product.id,
+                    "name": product.name,
+                    "category": product.category,
+                    "stock": stock,
+                    "predicted_demand": estimated_monthly_demand,
+                    "shortage": max(
+                        0, estimated_monthly_demand - stock
+                    ),
+                })
 
-        current_stock = product.stock
-
-        stock_gap = max(
-            predicted_demand - current_stock,
-            0
-        )
-
-        # Products that may need restocking.
-        if stock_gap > 0:
-            high_demand_products.append({
-                "id": product.id,
-                "name": product.name,
-                "category": product.category,
-                "current_stock": current_stock,
-                "predicted_demand": predicted_demand,
-                "stock_gap": stock_gap,
-            })
-
-        # Products whose current stock substantially
-        # exceeds the estimated next-month demand.
-        if (
-            predicted_demand > 0
-            and current_stock > predicted_demand * 1.5
-        ):
-            risk = (
-                "High"
-                if current_stock > predicted_demand * 2
-                else "Medium"
-            )
-
+        if stock <= minimum_stock:
             loss_risk_products.append({
                 "id": product.id,
                 "name": product.name,
                 "category": product.category,
-                "current_stock": current_stock,
-                "predicted_demand": predicted_demand,
-                "risk": risk,
-                "recommendation": (
-                    "Review existing stock, expiry dates, "
-                    "discount opportunities, and upcoming orders."
-                ),
+                "stock": stock,
+                "min_stock": minimum_stock,
+                "risk": "Low stock",
             })
 
+    # Highest shortage first
     high_demand_products.sort(
-        key=lambda item: item["stock_gap"],
-        reverse=True,
+        key=lambda item: item["shortage"],
+        reverse=True
     )
 
-    loss_risk_products.sort(
-        key=lambda item: (
-            item["risk"] == "High",
-            item["current_stock"] - item["predicted_demand"],
-        ),
-        reverse=True,
-    )
-
-    # ------------------------------------------------------
-    # 9. INVESTMENT ALLOCATION
-    # These are editable planning defaults, not AI advice.
-    # ------------------------------------------------------
-
-    allocation_items = [
-        {
-            "name": "Grocery",
-            "percent": 30,
-            "css_class": "allocation-grocery",
-        },
-        {
-            "name": "Vegetables",
-            "percent": 20,
-            "css_class": "allocation-vegetables",
-        },
-        {
-            "name": "Dairy",
-            "percent": 15,
-            "css_class": "allocation-dairy",
-        },
-        {
-            "name": "Beverages",
-            "percent": 10,
-            "css_class": "allocation-beverages",
-        },
-        {
-            "name": "Snacks",
-            "percent": 10,
-            "css_class": "allocation-snacks",
-        },
-        {
-            "name": "Bakery",
-            "percent": 5,
-            "css_class": "allocation-bakery",
-        },
-        {
-            "name": "Personal Care",
-            "percent": 5,
-            "css_class": "allocation-personal",
-        },
-        {
-            "name": "Household",
-            "percent": 5,
-            "css_class": "allocation-household",
-        },
-    ]
-
-    # ------------------------------------------------------
-    # 10. RETURN TEMPLATE AND API DATA
-    # ------------------------------------------------------
-
+    # -----------------------------------------
+    # 8. Return values for your existing
+    #    prediction page
+    # -----------------------------------------
     return {
-        "forecast_month": forecast_month,
-        "predicted_sales": predicted_sales,
-        "predicted_cost": predicted_cost,
-        "predicted_profit": predicted_profit,
-        "profit_margin": profit_margin,
-        "predicted_growth": predicted_growth,
-        "previous_sales": historical_revenue,
-        "historical_sales": historical_revenue,
-        "historical_cost": historical_cost,
-        "confidence": confidence,
-        "risk_level": risk_level,
-        "observed_days": observed_days,
+        "forecast_month": forecast_start.strftime("%B %Y"),
+        "forecast_start": forecast_start,
+        "forecast_end": forecast_end,
+        "predicted_sales": round(predicted_sales, 2),
+        "predicted_cost": round(predicted_cost, 2),
+        "predicted_profit": round(predicted_profit, 2),
+        "profit_margin": round(profit_margin, 2),
+        "forecast_method": forecast_method,
         "high_demand_products": high_demand_products,
         "loss_risk_products": loss_risk_products,
-        "allocation_items": allocation_items,
+        "is_profit": predicted_profit >= 0,
+        "historical_months_used": len(seasonal_revenues),
     }
 
 
-# ==========================================================
-# AI PREDICTION PAGE
-# ==========================================================
 
-@login_required(login_url="login")
+
+def make_json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, dict):
+        return {key: make_json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [make_json_safe(item) for item in value]
+    return value
+
+
+
+@admin_required
 def aiprediction(request):
     data = get_business_prediction()
 
-    context = {
+    return render(request, "aiprediction.html", {
         "forecast": data,
-        "high_demand_products": data["high_demand_products"],
-        "loss_risk_products": data["loss_risk_products"],
-        "allocation_items": data["allocation_items"],
-    }
-
-    return render(
-        request,
-        "aiprediction.html",
-        context,
-    )
-
-
-# ==========================================================
-# AI PREDICTION JSON API
-# ==========================================================
-
-@login_required(login_url="login")
-def aiprediction_api(request):
-    data = get_business_prediction()
-
-    # Convert Decimal values recursively for JSON.
-    def make_json_safe(value):
-        if isinstance(value, Decimal):
-            return float(value)
-
-        if isinstance(value, dict):
-            return {
-                key: make_json_safe(item)
-                for key, item in value.items()
-            }
-
-        if isinstance(value, list):
-            return [
-                make_json_safe(item)
-                for item in value
-            ]
-
-        return value
-
-    return JsonResponse({
-        "success": True,
-        "forecast": make_json_safe(data),
+        "high_demand_products": data.get("high_demand_products", []),
+        "loss_risk_products": data.get("loss_risk_products", []),
+        "allocation_items": data.get("allocation_items", []),
     })
 
 
+@admin_required
+@require_GET
+def aiprediction_api(request):
+    return JsonResponse({
+        "success": True,
+        "forecast": make_json_safe(get_business_prediction()),
+    })
 
 
 # ==========================================================
-# AI BUSINESS PREDICTION - HELPER FUNCTION
+# PREVIOUS-YEAR REPORT HELPERS AND PAGE
 # ==========================================================
-
 
 def get_yearly_report_data(year):
-    """
-    Calculate monthly revenue, product cost, profit,
-    transaction count, category sales and top products.
-    """
-
-    zero = Decimal("0.00")
-
-    # All sales recorded during the selected year.
-    year_sales = Sale.objects.filter(
-        sale_date__year=year
-    )
-
-    # Cost is estimated using each product's current cost_price.
+    zero = ZERO
+    year_sales = Sale.objects.filter(sale_date__year=year)
     cost_expression = ExpressionWrapper(
         F("quantity") * F("product__cost_price"),
-        output_field=DecimalField(
-            max_digits=14,
-            decimal_places=2
-        )
+        output_field=MONEY_FIELD,
     )
-
     totals = year_sales.aggregate(
         revenue=Sum("total_amount"),
         cost=Sum(cost_expression),
     )
-
-    total_revenue = totals["revenue"] or zero
-    total_cost = totals["cost"] or zero
-    total_profit = total_revenue - total_cost
-
+    revenue = totals["revenue"] or zero
+    cost = totals["cost"] or zero
+    profit = revenue - cost
     transaction_count = year_sales.count()
+    margin = profit / revenue * 100 if revenue else zero
 
-    average_monthly_sales = total_revenue / Decimal("12")
-
-    profit_margin = (
-        total_profit / total_revenue * Decimal("100")
-        if total_revenue else zero
-    )
-
-    # Build all 12 months, including months with no sales.
     monthly_rows = []
-
     for month in range(1, 13):
-        month_sales = year_sales.filter(
-            sale_date__month=month
-        )
-
-        monthly_totals = month_sales.aggregate(
-            revenue=Sum("total_amount"),
-            cost=Sum(cost_expression),
-        )
-
-        revenue = monthly_totals["revenue"] or zero
-        cost = monthly_totals["cost"] or zero
-        profit = revenue - cost
-
-        margin = (
-            profit / revenue * Decimal("100")
-            if revenue else zero
-        )
-
+        qs = year_sales.filter(sale_date__month=month)
+        row_totals = qs.aggregate(revenue=Sum("total_amount"), cost=Sum(cost_expression))
+        month_revenue = row_totals["revenue"] or zero
+        month_cost = row_totals["cost"] or zero
+        month_profit = month_revenue - month_cost
+        month_margin = month_profit / month_revenue * 100 if month_revenue else zero
         monthly_rows.append({
             "month_number": month,
             "month": calendar.month_name[month],
             "short_month": calendar.month_abbr[month],
-            "sales": revenue,
-            "cost": cost,
-            "profit": profit,
-            "margin": round(float(margin), 2),
-            "transactions": month_sales.count(),
+            "sales": month_revenue,
+            "cost": month_cost,
+            "profit": month_profit,
+            "margin": round(float(month_margin), 2),
+            "transactions": qs.count(),
         })
 
-    best_month = max(
-        monthly_rows,
-        key=lambda row: row["sales"],
-        default=None
-    )
-
-    # Category performance from recorded sale items.
-    category_rows = list(
-        year_sales.values("product__category")
-        .annotate(revenue=Sum("total_amount"))
-        .order_by("-revenue")
-    )
-
+    best_month = max(monthly_rows, key=lambda row: row["sales"], default=None)
+    category_rows = year_sales.values("product__category").annotate(
+        revenue=Sum("total_amount")
+    ).order_by("-revenue")
+    colors = ["#6478f5", "#20b486", "#f4a340", "#ec6b83",
+              "#8b5cf6", "#17a2b8", "#e87932", "#64748b"]
     category_data = []
-    category_colors = [
-        "#6478f5", "#20b486", "#f4a340",
-        "#ec6b83", "#8b5cf6", "#17a2b8",
-        "#e87932", "#64748b",
-    ]
-
     for index, row in enumerate(category_rows):
-        revenue = row["revenue"] or zero
-
-        percentage = (
-            float(revenue / total_revenue * Decimal("100"))
-            if total_revenue else 0
-        )
-
+        cat_revenue = row["revenue"] or zero
         category_data.append({
             "name": row["product__category"] or "Uncategorized",
-            "revenue": revenue,
-            "percentage": round(percentage, 1),
-            "color": category_colors[index % len(category_colors)],
+            "revenue": cat_revenue,
+            "percentage": round(float(cat_revenue / revenue * 100), 1) if revenue else 0,
+            "color": colors[index % len(colors)],
         })
 
-    # Top 5 products by recorded sales revenue.
     top_products = list(
-        year_sales.values(
-            "product_id",
-            "product__name",
-            "product__category",
-        )
-        .annotate(
-            revenue=Sum("total_amount"),
-            units_sold=Sum("quantity"),
-        )
+        year_sales.values("product_id", "product__name", "product__category")
+        .annotate(revenue=Sum("total_amount"), units_sold=Sum("quantity"))
         .order_by("-revenue")[:5]
     )
+    for rank, item in enumerate(top_products, start=1):
+        item["rank"] = rank
+        item["name"] = item["product__name"]
+        item["category"] = item["product__category"] or "Uncategorized"
+        item["revenue"] = item["revenue"] or zero
 
-    for index, product in enumerate(top_products, start=1):
-        product["rank"] = index
-        product["name"] = product["product__name"]
-        product["category"] = (
-            product["product__category"] or "Uncategorized"
-        )
-        product["revenue"] = product["revenue"] or zero
-
-    # Overall performance label.
-    if total_revenue == 0:
+    if not revenue:
         performance = "No Sales Data"
-    elif profit_margin >= 20:
+    elif margin >= 20:
         performance = "Excellent"
-    elif profit_margin >= 10:
+    elif margin >= 10:
         performance = "Good"
-    elif profit_margin >= 0:
+    elif margin >= 0:
         performance = "Average"
     else:
         performance = "Loss"
 
     return {
         "year": year,
-        "total_revenue": total_revenue,
-        "total_cost": total_cost,
-        "total_profit": total_profit,
-        "average_monthly_sales": average_monthly_sales,
-        "profit_margin": round(float(profit_margin), 2),
+        "total_revenue": revenue,
+        "total_cost": cost,
+        "total_profit": profit,
+        "average_monthly_sales": revenue / Decimal("12"),
+        "profit_margin": round(float(margin), 2),
         "transaction_count": transaction_count,
         "best_month": best_month,
         "monthly_rows": monthly_rows,
@@ -1569,617 +1219,511 @@ def get_yearly_report_data(year):
     }
 
 
-# ==========================================================
-# PREVIOUS YEAR SALES REPORT PAGE
-# ==========================================================
-
-@login_required(login_url="login")
+@admin_required
 def previousyear(request):
     current_year = timezone.localdate().year
-
-    # Use the previous completed calendar year by default.
-    default_year = current_year - 1
-
     try:
-        selected_year = int(
-            request.GET.get("year", default_year)
-        )
-    except (ValueError, TypeError):
-        selected_year = default_year
-
+        selected_year = int(request.GET.get("year", current_year - 1))
+    except (TypeError, ValueError):
+        selected_year = current_year - 1
     try:
-        compare_year = int(
-            request.GET.get("compare_year", selected_year - 1)
-        )
-    except (ValueError, TypeError):
+        compare_year = int(request.GET.get("compare_year", selected_year - 1))
+    except (TypeError, ValueError):
         compare_year = selected_year - 1
 
-    # Restrict the selectable year range.
     selected_year = max(2000, min(selected_year, current_year))
     compare_year = max(2000, min(compare_year, current_year))
-
     report = get_yearly_report_data(selected_year)
     comparison = get_yearly_report_data(compare_year)
 
-    # Growth is based on revenue, not profit.
-    if comparison["total_revenue"] > 0:
+    if comparison["total_revenue"]:
         growth = (
-            (
-                report["total_revenue"]
-                - comparison["total_revenue"]
-            )
-            / comparison["total_revenue"]
-        ) * Decimal("100")
-    elif report["total_revenue"] > 0:
-        growth = Decimal("100")
+            (report["total_revenue"] - comparison["total_revenue"])
+            / comparison["total_revenue"] * 100
+        )
     else:
-        growth = Decimal("0")
+        growth = Decimal("100") if report["total_revenue"] else ZERO
 
-    # Prepare chart values for both years.
-    chart_labels = [
-        row["short_month"] for row in report["monthly_rows"]
-    ]
-
-    chart_current = [
-        float(row["sales"]) for row in report["monthly_rows"]
-    ]
-
-    chart_previous = [
-        float(row["sales"]) for row in comparison["monthly_rows"]
-    ]
-
-    available_years = range(current_year, 1999, -1)
-
-    context = {
+    return render(request, "previousyear.html", {
         "report": report,
         "comparison": comparison,
         "selected_year": selected_year,
         "compare_year": compare_year,
-        "available_years": available_years,
+        "available_years": range(current_year, 1999, -1),
         "growth": round(float(growth), 2),
-        "chart_labels": chart_labels,
-        "chart_current": chart_current,
-        "chart_previous": chart_previous,
-    }
-
-    return render(
-        request,
-        "previousyear.html",
-        context
-    )
+        "chart_labels": [row["short_month"] for row in report["monthly_rows"]],
+        "chart_current": [float(row["sales"]) for row in report["monthly_rows"]],
+        "chart_previous": [float(row["sales"]) for row in comparison["monthly_rows"]],
+    })
 
 
 # ==========================================================
-# EXPORT PREVIOUS YEAR REPORT AS CSV
+# EXPORT PREVIOUS-YEAR REPORT AS EXCEL
 # ==========================================================
 
-@login_required(login_url="login")
-def export_previousyear(request):
-    current_year = timezone.localdate().year
-
-    try:
-        year = int(
-            request.GET.get("year", current_year - 1)
-        )
-    except (ValueError, TypeError):
-        year = current_year - 1
-
-    year = max(2000, min(year, current_year))
-
-    report = get_yearly_report_data(year)
-
-    response = HttpResponse(
-        content_type="text/csv; charset=utf-8"
-    )
-
-    response["Content-Disposition"] = (
-        f'attachment; filename="sales_report_{year}.csv"'
-    )
-
-    # UTF-8 BOM helps Excel display the file correctly.
-    response.write("\ufeff")
-
-    writer = csv.writer(response)
-
-    writer.writerow([f"Supermarket AI - Sales Report {year}"])
-    writer.writerow([
-        "Month",
-        "Sales Revenue",
-        "Estimated Cost",
-        "Estimated Profit",
-        "Profit Margin (%)",
-        "Transactions",
-    ])
-
-    for row in report["monthly_rows"]:
-        writer.writerow([
-            row["month"],
-            row["sales"],
-            row["cost"],
-            row["profit"],
-            row["margin"],
-            row["transactions"],
-        ])
-
-    writer.writerow([])
-    writer.writerow([
-        "TOTAL",
-        report["total_revenue"],
-        report["total_cost"],
-        report["total_profit"],
-        report["profit_margin"],
-        report["transaction_count"],
-    ])
-
-    return response
-
-
-
-# ==========================================================
-# LOGOUT
-# ==========================================================
-
-def logout_view(request):
-    logout(request)  # Ends the current user's session
-    messages.success(request, "You have logged out successfully.")
-    return redirect('login')
-
-
-from datetime import datetime
-from decimal import Decimal
-
-from django.http import HttpResponse
-from django.utils import timezone
-from django.views.decorators.http import require_GET
-
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
-
-from .models import Sale
-
-
+@admin_required
 @require_GET
 def export_previousyear(request):
-    # Validate the selected year
     current_year = timezone.localdate().year
-
     try:
-        year = int(request.GET.get("year", current_year))
-        if not 1900 <= year <= 9998:
-            year = current_year
+        year = int(request.GET.get("year", current_year - 1))
+        year = max(2000, min(year, current_year))
     except (TypeError, ValueError):
-        year = current_year
+        year = current_year - 1
 
-    # Retrieve all sales for the selected year
-    sales = list(
+    sales_records = list(
         Sale.objects.filter(sale_date__year=year)
         .select_related("product")
         .order_by("sale_date")
     )
-
     workbook = Workbook()
-
-    # --------------------------------------------------
-    # SHEET 1: YEAR SUMMARY
-    # --------------------------------------------------
     summary = workbook.active
     summary.title = "Year Summary"
     summary.append(["Supermarket AI - Sales Report", year])
     summary.append(["Metric", "Value"])
 
-    total_revenue = Decimal("0.00")
-    total_cost = Decimal("0.00")
-    total_units = 0
-
-    monthly_data = {
-        month: {
-            "revenue": Decimal("0.00"),
-            "cost": Decimal("0.00"),
-            "transactions": 0,
-        }
-        for month in range(1, 13)
-    }
-
-    category_data = {}
-    product_data = {}
-
-    # --------------------------------------------------
-    # SHEET 2: TRANSACTIONS
-    # --------------------------------------------------
     transactions = workbook.create_sheet("Transactions")
     transactions.append([
-        "Sale Date",
-        "Product",
-        "Category",
-        "Quantity",
-        "Selling Price",
-        "Unit Cost",
-        "Revenue",
-        "Estimated Cost",
-        "Estimated Profit",
-        "Payment Method",
-        "Customer",
+        "Sale Date", "Product", "Category", "Quantity", "Selling Price",
+        "Unit Cost", "Revenue", "Estimated Cost", "Estimated Profit",
+        "Payment Method", "Customer",
     ])
 
-    for sale in sales:
+    monthly = {
+        m: {"revenue": ZERO, "cost": ZERO, "transactions": 0}
+        for m in range(1, 13)
+    }
+    categories = {}
+    products_data = {}
+    revenue_total = ZERO
+    cost_total = ZERO
+    units_total = 0
+
+    for sale in sales_records:
         product = sale.product
-        quantity = sale.quantity or 0
-
-        selling_price = Decimal(
-            str(sale.selling_price or "0")
-        )
-
-        revenue = Decimal(
-            str(
-                sale.total_amount
-                if sale.total_amount is not None
-                else selling_price * quantity
-            )
-        )
-
-        unit_cost = Decimal(
-            str(product.cost_price or "0")
-        )
-
-        cost = unit_cost * quantity
+        qty = sale.quantity or 0
+        selling_price = Decimal(str(sale.selling_price or 0))
+        revenue = Decimal(str(sale.total_amount or selling_price * qty))
+        unit_cost = Decimal(str(product.cost_price or 0))
+        cost = unit_cost * qty
         profit = revenue - cost
-
         category = product.category or "Uncategorized"
-        month = sale.sale_date.month
 
-        total_revenue += revenue
-        total_cost += cost
-        total_units += quantity
+        revenue_total += revenue
+        cost_total += cost
+        units_total += qty
+        monthly[sale.sale_date.month]["revenue"] += revenue
+        monthly[sale.sale_date.month]["cost"] += cost
+        monthly[sale.sale_date.month]["transactions"] += 1
+        categories[category] = categories.get(category, ZERO) + revenue
 
-        monthly_data[month]["revenue"] += revenue
-        monthly_data[month]["cost"] += cost
-        monthly_data[month]["transactions"] += 1
-
-        category_data.setdefault(category, Decimal("0.00"))
-        category_data[category] += revenue
-
-        product_id = product.pk
-
-        if product_id not in product_data:
-            product_data[product_id] = {
-                "name": product.name,
-                "category": category,
-                "units": 0,
-                "revenue": Decimal("0.00"),
-            }
-
-        product_data[product_id]["units"] += quantity
-        product_data[product_id]["revenue"] += revenue
-
-        payment = getattr(
-            sale,
-            "payment",
-            getattr(sale, "payment_method", ""),
-        )
+        pdata = products_data.setdefault(product.pk, {
+            "name": product.name, "category": category,
+            "units": 0, "revenue": ZERO,
+        })
+        pdata["units"] += qty
+        pdata["revenue"] += revenue
 
         transactions.append([
-            str(sale.sale_date),
-            product.name,
-            category,
-            quantity,
-            float(selling_price),
-            float(unit_cost),
-            float(revenue),
-            float(cost),
-            float(profit),
-            str(payment),
-            getattr(sale, "customer_name", "") or "",
+            str(sale.sale_date), product.name, category, qty,
+            float(selling_price), float(unit_cost), float(revenue),
+            float(cost), float(profit), sale.payment_method,
+            sale.customer_name or "",
         ])
 
-    total_profit = total_revenue - total_cost
+    profit_total = revenue_total - cost_total
+    margin = float(profit_total / revenue_total * 100) if revenue_total else 0
+    for label, value in [
+        ("Total Revenue", float(revenue_total)),
+        ("Estimated Cost", float(cost_total)),
+        ("Estimated Gross Profit", float(profit_total)),
+        ("Gross Profit Margin (%)", margin),
+        ("Sales Records", len(sales_records)),
+        ("Total Units Sold", units_total),
+        ("Average Monthly Sales", float(revenue_total / 12)),
+    ]:
+        summary.append([label, value])
 
-    profit_margin = (
-        float(total_profit / total_revenue * 100)
-        if total_revenue
-        else 0
-    )
-
-    summary.append(["Total Revenue", float(total_revenue)])
-    summary.append(["Estimated Cost", float(total_cost)])
-    summary.append(["Estimated Profit", float(total_profit)])
-    summary.append(["Profit Margin (%)", profit_margin])
-    summary.append(["Sales Records", len(sales)])
-    summary.append(["Total Units Sold", total_units])
-    summary.append([
-        "Average Monthly Sales",
-        float(total_revenue / 12),
-    ])
-
-    # --------------------------------------------------
-    # SHEET 3: MONTHLY REPORT
-    # --------------------------------------------------
     monthly_sheet = workbook.create_sheet("Monthly Report")
     monthly_sheet.append([
-        "Month",
-        "Sales",
-        "Estimated Cost",
-        "Profit / Loss",
-        "Profit Margin (%)",
-        "Transactions",
+        "Month", "Sales", "Estimated Cost", "Profit / Loss",
+        "Profit Margin (%)", "Transactions",
     ])
-
     for month in range(1, 13):
-        data = monthly_data[month]
-
-        revenue = data["revenue"]
-        cost = data["cost"]
-        profit = revenue - cost
-
-        margin = (
-            float(profit / revenue * 100)
-            if revenue
-            else 0
-        )
-
-        month_name = datetime(
-            year, month, 1
-        ).strftime("%B")
-
+        values = monthly[month]
+        rev, cost = values["revenue"], values["cost"]
+        profit = rev - cost
+        month_margin = float(profit / rev * 100) if rev else 0
         monthly_sheet.append([
-            month_name,
-            float(revenue),
-            float(cost),
-            float(profit),
-            margin,
-            data["transactions"],
+            calendar.month_name[month], float(rev), float(cost),
+            float(profit), month_margin, values["transactions"],
         ])
 
-    # --------------------------------------------------
-    # SHEET 4: CATEGORY PERFORMANCE
-    # --------------------------------------------------
-    categories = workbook.create_sheet("Categories")
-    categories.append([
-        "Category",
-        "Revenue",
-        "Revenue Share (%)",
-    ])
+    category_sheet = workbook.create_sheet("Categories")
+    category_sheet.append(["Category", "Revenue", "Revenue Share (%)"])
+    for name, value in sorted(categories.items(), key=lambda x: x[1], reverse=True):
+        share = float(value / revenue_total * 100) if revenue_total else 0
+        category_sheet.append([name, float(value), share])
 
-    for name, revenue in sorted(
-        category_data.items(),
-        key=lambda item: item[1],
-        reverse=True,
-    ):
-        percentage = (
-            float(revenue / total_revenue * 100)
-            if total_revenue
-            else 0
-        )
-
-        categories.append([
-            name,
-            float(revenue),
-            percentage,
+    products_sheet = workbook.create_sheet("Products")
+    products_sheet.append(["Rank", "Product Name", "Category", "Units Sold", "Revenue"])
+    ranked = sorted(products_data.values(), key=lambda x: x["revenue"], reverse=True)
+    for rank, item in enumerate(ranked, start=1):
+        products_sheet.append([
+            rank, item["name"], item["category"], item["units"], float(item["revenue"])
         ])
 
-    # --------------------------------------------------
-    # SHEET 5: ALL PRODUCTS
-    # --------------------------------------------------
-    products = workbook.create_sheet("Products")
-    products.append([
-        "Rank",
-        "Product Name",
-        "Category",
-        "Units Sold",
-        "Revenue",
-    ])
-
-    ranked_products = sorted(
-        product_data.values(),
-        key=lambda item: item["revenue"],
-        reverse=True,
-    )
-
-    for rank, item in enumerate(ranked_products, start=1):
-        products.append([
-            rank,
-            item["name"],
-            item["category"],
-            item["units"],
-            float(item["revenue"]),
-        ])
-
-    # --------------------------------------------------
-    # FORMAT ALL WORKSHEETS
-    # --------------------------------------------------
     for sheet in workbook.worksheets:
         sheet.freeze_panes = "A2"
-
         for cell in sheet[1]:
-            cell.font = Font(
-                bold=True,
-                color="FFFFFF",
-            )
-            cell.fill = PatternFill(
-                fill_type="solid",
-                fgColor="334155",
-            )
-            cell.alignment = Alignment(
-                horizontal="center",
-                vertical="center",
-            )
-
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(fill_type="solid", fgColor="334155")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
         for column in sheet.columns:
-            column_letter = get_column_letter(
-                column[0].column
-            )
-
+            letter = get_column_letter(column[0].column)
             max_length = max(
-                (
-                    len(str(cell.value))
-                    for cell in column
-                    if cell.value is not None
-                ),
+                (len(str(cell.value)) for cell in column if cell.value is not None),
                 default=10,
             )
-
-            sheet.column_dimensions[
-                column_letter
-            ].width = min(max(max_length + 3, 12), 35)
-
+            sheet.column_dimensions[letter].width = min(max(max_length + 3, 12), 35)
         if sheet.max_row >= 2:
             sheet.auto_filter.ref = sheet.dimensions
 
-    # Style the summary title
-    summary["A1"].font = Font(
-        bold=True,
-        size=16,
-        color="1D4ED8",
-    )
-
-    # --------------------------------------------------
-    # DOWNLOAD EXCEL FILE
-    # --------------------------------------------------
+    summary["A1"].font = Font(bold=True, size=16, color="1D4ED8")
     response = HttpResponse(
-        content_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        )
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
     response["Content-Disposition"] = (
         f'attachment; filename="supermarket_report_{year}.xlsx"'
     )
-
     response["Cache-Control"] = "no-store"
-
     workbook.save(response)
-
     return response
 
 
+# ==========================================================
+# DASHBOARD CHATBOT (RULE-BASED; NO EXTERNAL AI API)
+# ==========================================================
 
-
-
-
-
-
-import json
-from decimal import Decimal
-
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, F
-
-from .models import Product, Sale
-
-
-@login_required
+@admin_required
 @require_POST
 def dashboard_chat_api(request):
     try:
-        data = json.loads(request.body)
-        question = data.get("message", "").strip().lower()
-
+        data = parse_json_body(request)
+        question = str(data.get("message", "")).strip().lower()
         if not question:
-            return JsonResponse({
-                "answer": "Please enter a question."
-            }, status=400)
+            return JsonResponse({"answer": "Please enter a question."}, status=400)
 
-        # 1. Products that need restocking
-        if any(word in question for word in [
-            "restock", "low stock", "stock"
-        ]):
-            products = Product.objects.filter(
-                stock__lte=F("min_stock")
-            )
-
+        if any(word in question for word in ("restock", "low stock", "stock")):
+            products = Product.objects.filter(stock__lte=F("min_stock")).order_by("stock")
             if not products.exists():
                 answer = "All products currently have sufficient stock."
-
             else:
-                answer = "Products needing restocking:\n"
-                for p in products[:10]:
-                    answer += (
-                        f"\n• {p.name}: {p.stock} units available "
-                        f"(minimum: {p.min_stock})."
-                    )
-
-        # 2. Highest-selling products
-        elif any(word in question for word in [
-            "highest sales", "top products", "best selling",
-            "most sold", "popular products"
-        ]):
-            products = (
-                Sale.objects.values("product__name")
-                .annotate(total_quantity=Sum("quantity"),
-                          total_sales=Sum("total_amount"))
-                .order_by("-total_sales")[:5]
+                answer = "Products needing restocking:\n" + "\n".join(
+                    f"• {p.name}: {p.stock} units available (minimum: {p.min_stock})."
+                    for p in products[:10]
+                )
+        elif any(word in question for word in (
+            "highest sales", "top products", "best selling", "most sold", "popular products"
+        )):
+            top = Sale.objects.values("product__name").annotate(
+                total_quantity=Sum("quantity"), total_sales=Sum("total_amount")
+            ).order_by("-total_sales")[:5]
+            answer = (
+                "No sales records are available yet."
+                if not top else
+                "Top-selling products by sales value:\n" + "\n".join(
+                    f"{i}. {row['product__name']} — ₹{row['total_sales'] or 0} "
+                    f"(quantity sold: {row['total_quantity'] or 0})."
+                    for i, row in enumerate(top, start=1)
+                )
             )
-
-            if not products:
-                answer = "No sales records are available yet."
-            else:
-                answer = "Top-selling products by sales value:\n"
-                for i, p in enumerate(products, start=1):
-                    answer += (
-                        f"\n{i}. {p['product__name']} — "
-                        f"₹{p['total_sales'] or 0} "
-                        f"(quantity sold: {p['total_quantity'] or 0})."
-                    )
-
-        # 3. Total sales
-        elif "sales" in question or "revenue" in question:
-            total = Sale.objects.aggregate(
-                amount=Sum("total_amount")
-            )["amount"] or Decimal("0")
-
-            answer = f"Total recorded sales are ₹{total:,.2f}."
-
-        # 4. Product count
-        elif "product" in question:
-            count = Product.objects.count()
-            answer = f"Your supermarket currently has {count} products."
-
-        # 5. Profit-related questions (simple recorded estimate)
         elif "profit" in question or "loss" in question:
-            result = Sale.objects.aggregate(
-                revenue=Sum("total_amount"),
-                cost=Sum(F("quantity") * F("product__cost_price"))
+            cost_expr = ExpressionWrapper(
+                F("quantity") * F("product__cost_price"),
+                output_field=MONEY_FIELD,
             )
-
-            revenue = result["revenue"] or Decimal("0")
-            cost = result["cost"] or Decimal("0")
+            totals = Sale.objects.aggregate(
+                revenue=Sum("total_amount"), cost=Sum(cost_expr)
+            )
+            revenue = totals["revenue"] or ZERO
+            cost = totals["cost"] or ZERO
             profit = revenue - cost
-
             if profit > 0:
                 answer = (
-                    f"Recorded estimated profit is ₹{profit:,.2f}. "
-                    "This estimate uses recorded sales and product cost "
-                    "and does not include other business expenses."
+                    f"Recorded estimated gross profit is ₹{profit:,.2f}. "
+                    "This excludes operating expenses such as rent and wages."
                 )
             elif profit < 0:
                 answer = (
-                    f"Recorded estimated loss is ₹{abs(profit):,.2f}. "
-                    "This estimate does not include other business expenses."
+                    f"Recorded estimated gross loss is ₹{abs(profit):,.2f}. "
+                    "This excludes operating expenses."
                 )
             else:
-                answer = (
-                    "Recorded sales and product cost are currently equal, "
-                    "or there are no sales records."
-                )
-
-        # 6. Help for other questions
+                answer = "Recorded sales and product cost are equal, or there are no sales."
+        elif "sales" in question or "revenue" in question:
+            total = Sale.objects.aggregate(total=Sum("total_amount"))["total"] or ZERO
+            answer = f"Total recorded sales are ₹{total:,.2f}."
+        elif "product" in question:
+            answer = f"Your supermarket currently has {Product.objects.count()} products."
         else:
             answer = (
-                "I can answer questions about your supermarket records. "
-                "Try asking:\n"
+                "I can answer questions about your records. Try asking:\n"
                 "• Which products need restocking?\n"
                 "• Which products have the highest sales?\n"
                 "• What are my total sales?\n"
                 "• How many products do I have?\n"
                 "• Am I making a profit or loss?"
             )
-
         return JsonResponse({"answer": answer})
+    except ValueError:
+        return JsonResponse({"answer": "Invalid request. Please try again."}, status=400)
 
-    except (json.JSONDecodeError, AttributeError):
+
+# ==========================================================
+# RESTOCK APIS
+# RestockOrder must be defined only in store/models.py.
+# ==========================================================
+
+@admin_required
+@require_GET
+def restock_low_stock_api(request):
+    products = Product.objects.filter(
+        stock__lte=F("min_stock")
+    ).order_by("stock", "name")
+    return JsonResponse({
+        "success": True,
+        "products": [{
+            "id": p.id,
+            "name": p.name,
+            "sku": p.sku,
+            "stock": p.stock,
+            "min_stock": p.min_stock,
+            "supplier": p.supplier or "",
+        } for p in products],
+    })
+
+
+@admin_required
+@require_GET
+def restock_orders_api(request):
+    orders = RestockOrder.objects.select_related("product").all()
+    return JsonResponse({
+        "success": True,
+        "orders": [{
+            "id": order.id,
+            "product_id": order.product_id,
+            "product_name": order.product.name,
+            "quantity": order.quantity,
+            "supplier": order.supplier or "",
+            "expected_delivery": (
+                order.expected_delivery.isoformat()
+                if order.expected_delivery else ""
+            ),
+            "status": order.status,
+            "stock_applied": order.stock_applied,
+        } for order in orders],
+    })
+
+
+@admin_required
+@require_POST
+def restock_create_order(request):
+    try:
+        data = parse_json_body(request)
+        supplier = str(data.get("supplier", "")).strip()
+        delivery_text = data.get("expected_delivery") or None
+        expected_delivery = date.fromisoformat(delivery_text) if delivery_text else None
+        items = data.get("items", [])
+
+        if not isinstance(items, list) or not items:
+            return json_error("Add at least one product to the restock order.")
+
+        created_ids = []
+        with transaction.atomic():
+            for item in items:
+                product_id = int(item["product_id"])
+                quantity = int(item["quantity"])
+                if quantity <= 0:
+                    return json_error("Restock quantity must be greater than zero.")
+                product = Product.objects.select_for_update().get(pk=product_id)
+                order = RestockOrder.objects.create(
+                    product=product,
+                    quantity=quantity,
+                    supplier=supplier or product.supplier,
+                    expected_delivery=expected_delivery,
+                )
+                created_ids.append(order.id)
+
         return JsonResponse({
-            "answer": "Invalid request. Please enter your question again."
-        }, status=400)
+            "success": True,
+            "message": "Restock order created successfully.",
+            "order_ids": created_ids,
+        })
+    except Product.DoesNotExist:
+        return json_error("A selected product does not exist.")
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return json_error("Invalid restock order details.")
+
+    
+    
+@admin_required
+@require_GET
+def restock_orders_api(request):
+    orders = RestockOrder.objects.select_related("product").all()
+
+    return JsonResponse({
+        "success": True,
+        "orders": [{
+            "id": order.id,
+            "product_id": order.product_id,
+            "product_name": order.product.name,
+            "quantity": order.quantity,
+            "received_quantity": order.received_quantity,
+            "supplier": order.supplier or "",
+            "expected_delivery": (
+                order.expected_delivery.isoformat()
+                if order.expected_delivery else ""
+            ),
+            "status": order.status,
+            "stock_applied": order.stock_applied,
+            "created_at": timezone.localtime(
+                order.created_at
+            ).strftime("%d %b %Y"),
+        } for order in orders],
+    })
+
+
+@admin_required
+@require_POST
+def restock_update_status(request, order_id):
+    try:
+        data = parse_json_body(request)
+        new_status = data.get("status")
+
+        allowed_statuses = {
+            choice[0] for choice in RestockOrder.STATUS_CHOICES
+        }
+
+        if new_status not in allowed_statuses:
+            return json_error("Invalid restock status.")
+
+        with transaction.atomic():
+            order = RestockOrder.objects.select_for_update().get(
+                pk=order_id
+            )
+
+            if order.stock_applied:
+                return json_error(
+                    "Stock has already been added. This order cannot be changed."
+                )
+
+            if order.status == "Cancelled":
+                return json_error("A cancelled order cannot be changed.")
+
+            if order.status == "Received" and new_status != "Received":
+                return json_error(
+                    "A received order cannot be reverted."
+                )
+
+            if new_status == "Cancelled" and order.status == "Received":
+                return json_error("A received order cannot be cancelled.")
+
+            order.status = new_status
+            order.save(update_fields=["status", "updated_at"])
+
+        return JsonResponse({
+            "success": True,
+            "message": f"Order status updated to {new_status}.",
+        })
+
+    except RestockOrder.DoesNotExist:
+        return json_error("Restock order not found.", 404)
+    except ValueError:
+        return json_error("Invalid request body.")
+
+
+import json
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.db import transaction
+
+from .models import RestockOrder, Product
+
+
+
+@admin_required
+@require_POST
+def add_received_stock(request, order_id):
+    try:
+        data = parse_json_body(request)
+
+        # JavaScript must send this exact field name.
+        received_quantity = int(data.get("received_quantity", 0))
+
+        if received_quantity <= 0:
+            return json_error(
+                "Received quantity must be greater than zero."
+            )
+
+    except (ValueError, TypeError, OverflowError):
+        return json_error(
+            "Invalid quantity. Enter a whole number greater than zero."
+        )
+
+    with transaction.atomic():
+        try:
+            order = (
+                RestockOrder.objects
+                .select_for_update()
+                .select_related("product")
+                .get(pk=order_id)
+            )
+        except RestockOrder.DoesNotExist:
+            return json_error("Purchase order not found.", 404)
+
+        if order.status != "Received":
+            return json_error(
+                "Change the order status to Received before adding stock."
+            )
+
+        if order.stock_applied:
+            return json_error(
+                "Stock has already been added for this order."
+            )
+
+        if received_quantity > order.quantity:
+            return json_error(
+                f"Received quantity cannot exceed the ordered "
+                f"quantity of {order.quantity}."
+            )
+
+        product = (
+            Product.objects
+            .select_for_update()
+            .get(pk=order.product_id)
+        )
+
+        # Update product stock.
+        product.stock += received_quantity
+        product.save(update_fields=["stock", "updated_at"])
+
+        # Mark this order as processed.
+        order.received_quantity = received_quantity
+        order.stock_applied = True
+        order.save(update_fields=[
+            "received_quantity",
+            "stock_applied",
+            "updated_at",
+        ])
+
+    return JsonResponse({
+        "success": True,
+        "message": (
+            f"{received_quantity} units of "
+            f"{product.name} added to stock successfully."
+        ),
+        "received_quantity": received_quantity,
+        "new_stock": product.stock,
+    })
